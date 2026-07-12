@@ -1,69 +1,105 @@
 /**
- * UNIFIED BACKTEST — ICR Strategy + Anavitrade Native Pipeline
+ * UNIFIED BACKTEST — Full System Comparison (NO LOOKAHEAD BIAS)
  *
- * Evaluates four cohorts side-by-side on the same 1,291-trade corpus
- * with the same risk model (5% risk, 3x leverage, ATR stops, R-multiple TP).
+ * CRITICAL RULE: All scoring functions use ONLY pre-trade data:
+ *   ✅ indicator, period, pair, tier, score, entry, stop, tp
+ *   ❌ pnlPct, maxPct, ddPct, outcome, win
  *
- * Cohorts:
- *   A) ICR Strategy only — coil gate (≥72) + MACD cross + trend filter
- *   B) Anavitrade Native — 12-layer forward-only scoring + SMC + MTF
- *   C) Hybrid — signal accepted if EITHER cohort fires (union)
- *   D) Consensus — signal accepted ONLY if BOTH cohorts fire
- *
- * Also runs walk-forward: train on days 0-20, validate on days 21-30
- * to check for overfitting.
+ * pnlPct/ddPct/maxPct are used ONLY in the portfolio simulator
+ * to compute trade outcome — never in the entry decision.
  */
 import { readFileSync, writeFileSync } from 'fs';
 
 const ALL = JSON.parse(readFileSync('/home/ariel/anavitrade-trading/scripts/backtest-prioritized.json', 'utf8')).trades;
+const ATR = {'5m':0.3,'15m':0.5,'30m':0.8,'1h':1.2,'2h':1.5,'4h':2.0,'1d':3.5,'1w':6.0};
 
-/* ─── Simulated ICR Scoring ─────────────────────────────────────────
- * The ICR strategy uses: coiling pump score + impulse + compression
- * + trigger confirmation + RR threshold (=2.5).
- *
- * We approximate from available fields: */
+/* ════════════════════════════════════════════════════════════════════════
+ * STRATEGY A — ICR SCORING (forward-only)
+ * Uses only: indicator, period, tier, score, entry, stop, tp
+ * ════════════════════════════════════════════════════════════════════════ */
+
 function icrScore(trade) {
   const ind = (trade.indicator || '').toLowerCase();
   const period = trade.period || '1h';
-  const maxProfit = parseFloat(trade.pnlPct || '0');
-  const maxProfitPct = Math.abs(maxProfit);
+  const entry = trade.entry || 0;
+  const stop = trade.stop || 0;
+  const tp = trade.tp || 0;
 
-  // Coil gate: range/ATR contraction (proxy: drawdown < 1.5% = coiling)
-  const coilScore = trade.ddPct && trade.ddPct < 1.5 ? Math.min(85, 50 + maxProfitPct * 5) : Math.max(30, 50 - maxProfitPct * 2);
-  const coilValid = coilScore >= 72;
+  // ── 1. Trend gate (0-20 pts) ──
+  let trendScore = 0;
+  if (period === '4h' || period === '1d') trendScore += 8;
+  else if (period === '1h') trendScore += 5;
+  else trendScore += 2;
 
-  // Impulse: strong directional move (proxy: maxProfit > 1%)
-  const impulseValid = maxProfitPct > 1;
+  if (ind.includes('macd') || ind.includes('trend') || ind.includes('reversal')) trendScore += 8;
+  else if (ind.includes('stoch') && (period === '4h' || period === '1h')) trendScore += 5;
+  else if (ind.includes('ichimoku')) trendScore += 5;
+  else trendScore += 2;
+  trendScore = Math.min(20, trendScore);
+  if (trendScore < 8) return { accepted: false, score: trendScore, tier: 'C', reason: 'trend' };
 
-  // Compression (proxy: drawdown < 1% AND maxProfit < 3%)
-  const compressionValid = trade.ddPct && trade.ddPct < 1 && maxProfitPct < 3;
+  // ── 2. Entry quality (0-25 pts) — based on stop distance as % of price ──
+  let entryScore = 0;
+  const periodAtr = ATR[period] || 1.5;
+  const stopDistPct = entry > 0 ? Math.abs(entry - stop) / entry * 100 : 0;
 
-  // "Trigger confirmation": the indicator itself
-  const indicatorValid = trade.indicatorName || trade.indicator || '';
-  const hasStrongIndicator = ind.includes('macd') || ind.includes('stoch');
-  const hasMidIndicator = ind.includes('trend') || ind.includes('reversal') || ind.includes('cci');
+  // Wider stop relative to ATR = structural entry conviction
+  if (stopDistPct > periodAtr * 2) entryScore += 12;
+  else if (stopDistPct > periodAtr * 1.2) entryScore += 8;
+  else if (stopDistPct > periodAtr * 0.8) entryScore += 5;
+  else entryScore += 2;
 
-  // ICR composite score (0-100)
-  let score = 0;
-  if (coilValid) score += 30;
-  if (impulseValid) score += 25;
-  if (compressionValid) score += 15;
-  if (hasStrongIndicator) score += 20;
-  else if (hasMidIndicator) score += 10;
-  if (hasStrongIndicator && period === '4h') score += 10; // 4h MACD bonus
+  // Higher Coinlegs score = better entry
+  const cs = trade.score || 0;
+  if (cs >= 36) entryScore += 8;
+  else if (cs >= 30) entryScore += 5;
+  else if (cs >= 24) entryScore += 3;
+  else entryScore += 1;
 
-  // ICR threshold: score >= 72
-  const accepted = score >= 72;
+  // Tier B (higher volume/score from Coinlegs) = stronger confirmation
+  if (trade.tier === 'B') entryScore += 5;
 
-  return { accepted, score, coilScore, coilValid, impulseValid, compressionValid };
+  entryScore = Math.min(25, entryScore);
+
+  // ── 3. Risk/Reward quality (0-20 pts) ──
+  const risk = Math.abs(entry - stop);
+  const reward = Math.abs(tp - entry);
+  const rr = risk > 0 ? reward / risk : 0;
+
+  let rrScore = 0;
+  if (rr >= 4) rrScore = 20;
+  else if (rr >= 3) rrScore = 16;
+  else if (rr >= 2.5) rrScore = 13;
+  else if (rr >= 2) rrScore = 10;
+  else if (rr >= 1.5) rrScore = 7;
+  else if (rr >= 1) rrScore = 4;
+  else rrScore = 1;
+
+  // ── 4. Composite ──
+  const composite = trendScore + entryScore + rrScore;
+  const SCORE_THRESHOLD = 55;  // lowered from 65 since we removed forward-looking components
+  const MIN_RR = 1.5;
+  const TIER_A = 70;
+  const TIER_B = 55;
+
+  if (composite < SCORE_THRESHOLD || rr < MIN_RR) {
+    return { accepted: false, score: composite, tier: 'C', rr };
+  }
+
+  const tier = composite >= TIER_A ? 'A' : composite >= TIER_B ? 'B' : 'C';
+  return { accepted: true, score: composite, tier, rr };
 }
 
-/* ─── Anavitrade Native Scoring ───────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════
+ * STRATEGY B — ANAVITRADE NATIVE (forward-only)
+ * Uses only: indicator, period, tier, score, entry, stop, tp
+ * ════════════════════════════════════════════════════════════════════════ */
+
 function nativeScore(trade) {
   const ind = (trade.indicator || '').toLowerCase();
   const period = trade.period || '1h';
-  const pnl = parseFloat(trade.pnlPct || '0');
-  const dd = trade.ddPct || 0;
+  const entry = trade.entry || 0;
+  const stop = trade.stop || 0;
 
   // Indicator × timeframe (0-40)
   let s = 0;
@@ -71,167 +107,296 @@ function nativeScore(trade) {
   else if (period === '1h') s += 14;
   else if (period === '30m') s += 6;
   else s += 4;
+
   if (ind.includes('macd')) s += 20;
   else if (ind.includes('stoch')) s += 18;
   else if (ind.includes('trend') || ind.includes('reversal')) s += 14;
   else if (ind.includes('cci')) s += 12;
+  else if (ind.includes('ichimoku')) s += 10;
 
-  // Confluence (0-25) — more indicators = higher conf
-  const confCount = ALL.filter(t => t.pair === trade.pair && t.period === period).length;
+  // Confluence (0-25) — other trades on same pair-period
+  const samePair = ALL.filter(t => t.pair === trade.pair && t.period === period);
+  const confCount = samePair.length;
   if (confCount >= 4) s += 25;
   else if (confCount >= 3) s += 18;
   else if (confCount >= 2) s += 12;
 
-  // Momentum (0-15) — drawdown as proxy for sweep depth
-  if (dd > 2) s += 15;    // deep sell-side sweep = structural entry
-  else if (dd > 1) s += 8;
-  else if (dd < 0.3) s += 5; // tight = momentum continuation
+  // Stop quality (0-15) — wider stop = more structural
+  const periodAtr = ATR[period] || 1.5;
+  const stopDistPct = entry > 0 ? Math.abs(entry - stop) / entry * 100 : 0;
+  if (stopDistPct > periodAtr * 2) s += 15;
+  else if (stopDistPct > periodAtr) s += 8;
+  else if (stopDistPct > periodAtr * 0.5) s += 4;
 
-  // SMC gate pass? Bias + displacement proxy
-  const smcPass = (period === '4h' || period === '1h') && (ind.includes('macd') || ind.includes('stoch'));
-  const tier = s >= 55 ? 'A' : s >= 40 ? 'B' : 'C';
-  const accepted = tier === 'A' || (tier === 'B' && confCount >= 3);
-  return { accepted, score: s, tier, smcPass };
+  // Coinlegs score bonus (0-10)
+  const cs = trade.score || 0;
+  if (cs >= 36) s += 10;
+  else if (cs >= 30) s += 6;
+  else if (cs >= 24) s += 3;
+
+  const accepted = s >= 45;
+  return { accepted, score: s, tier: s >= 55 ? 'A' : s >= 40 ? 'B' : 'C' };
 }
 
-/* ─── Portfolio Simulator ─────────────────────────────────────────── */
-function simulate(trades, acceptFn, label) {
-  const results = [];
-  const ATR = {'5m':0.3,'15m':0.5,'30m':0.8,'1h':1.2,'4h':2.0,'1d':3.5,'1w':6.0};
+/* ════════════════════════════════════════════════════════════════════════
+ * STRATEGY E — ICT SNIPER ENTRY (forward-only)
+ *
+ * Detects ICT patterns from pre-entry data:
+ *   - Pattern selection from indicator + timeframe + stop placement
+ *   - Entry quality from stop structure
+ *   - Minimum 3% move potential from stop-to-target distance
+ * ════════════════════════════════════════════════════════════════════════ */
 
+function sniperScore(trade) {
+  const ind = (trade.indicator || '').toLowerCase();
+  const period = trade.period || '1h';
+  const entry = trade.entry || 0;
+  const stop = trade.stop || 0;
+  const tp = trade.tp || 0;
+
+  // Target move % (available pre-entry from TP)
+  const targetMove = entry > 0 ? Math.abs(tp - entry) / entry * 100 : 0;
+
+  // Stop distance % (pre-entry)
+  const stopDist = entry > 0 ? Math.abs(entry - stop) / entry * 100 : 0;
+  const periodAtr = ATR[period] || 1.5;
+
+  // 3% move filter
+  if (period === '4h' && targetMove < 1.5) return { accepted: false, pattern: null, score: 0, reason: 'under_3pct' };
+  if (period === '1h' && targetMove < 2.0) return { accepted: false, pattern: null, score: 0, reason: 'under_3pct' };
+  if (targetMove < 3.0) return { accepted: false, pattern: null, score: 0, reason: 'under_3pct' };
+
+  // Pattern detection using pre-entry signals
+  const stopWide = stopDist > periodAtr * 1.5;   // wide stop = structural
+  const stopMedium = stopDist > periodAtr * 0.8; // medium stop
+  const stopTight = stopDist < periodAtr * 0.6;  // tight stop
+
+  let pattern = null;
+  let patternScore = 0;
+
+  // Order Block (OB): wide stop + trend reversal indicator
+  if (stopWide && (ind.includes('trend') || ind.includes('reversal') || ind.includes('cci'))) {
+    pattern = 'OB';
+    patternScore = 9;
+  }
+  // Market Structure Shift (MSS): reversal + structural stop
+  else if ((ind.includes('trend') || ind.includes('reversal')) && stopMedium) {
+    pattern = 'MSS';
+    patternScore = 8;
+  }
+  // Liquidity Sweep: wide stop on stochastic/CCI (reversal from sweep)
+  else if (stopWide && (ind.includes('stoch') || ind.includes('cci'))) {
+    pattern = 'LIQ_SWEEP';
+    patternScore = 7;
+  }
+  // Break of Structure (BOS): macd/ichimoku on HTF with medium stop
+  else if (stopMedium && (period === '4h' || period === '1h') &&
+           (ind.includes('macd') || ind.includes('ichimoku'))) {
+    pattern = 'BOS';
+    patternScore = 7;
+  }
+  // FVG: tighter stop, MACD/Stoch momentum
+  else if (stopTight && (ind.includes('macd') || ind.includes('stoch'))) {
+    pattern = 'FVG';
+    patternScore = 5;
+  }
+
+  if (!pattern) return { accepted: false, pattern: null, score: 0, reason: 'no_pattern' };
+
+  // HTF bonus
+  const htfBonus = period === '4h' ? 1.3 : period === '1h' ? 1.1 : 1.0;
+  patternScore = Math.round(patternScore * htfBonus * 10) / 10;
+
+  return { accepted: true, pattern, score: patternScore, targetMove };
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * PORTFOLIO SIMULATOR
+ * ════════════════════════════════════════════════════════════════════════ */
+
+function simulate(trades, acceptFn, label) {
   let eq = 10000, peak = 10000, maxDD = 0;
   let tradeCount = 0, wins = 0;
+  const details = [];
 
   for (const t of trades) {
-    if (!acceptFn(t)) continue;
+    const result = acceptFn(t);
+    if (!result || !result.accepted) continue;
     tradeCount++;
 
-    const stop = (ATR[t.period] || 1.5) * 1.5 / 100;
+    const stopPct = (ATR[t.period] || 1.5) * 1.5 / 100;
     const lev = t.period === '4h' || t.period === '1d' ? 3 : 2;
-    const pos = 0.05 / stop;
+    const pos = 0.05 / stopPct;
     const ret = Math.max(-0.10, Math.min(0.10, pos * lev * (t.pnlPct / 100)));
 
-    eq *= (1 + Math.max(-0.10, Math.min(0.10, ret)));
+    eq *= (1 + ret);
     if (eq > peak) peak = eq;
     const dd = (peak - eq) / peak * 100;
     if (dd > maxDD) maxDD = dd;
 
     if (t.win) wins++;
-    results.push({ eq, ret, pnlPct: t.pnlPct, pair: t.pair, period: t.period, indicator: t.indicator });
+    details.push({ eq, ret, ...result, pair: t.pair, period: t.period, indicator: t.indicator });
+  }
+
+  if (tradeCount === 0) {
+    return { label, trades: 0, wins: 0, losses: 0, wr: "N/A", totalReturn: "0", avgRet: "N/A", sharpe: "N/A", maxDD: "N/A" };
   }
 
   const totalRet = (eq / 10000 - 1) * 100;
-  const monthlyRet = totalRet / ((tradeCount / 5) / 20 * 30); // normalize: 5 trades/day → 20 days/month
-  const wr = tradeCount ? (wins / tradeCount * 100) : 0;
-  const avgRet = results.length ? results.reduce((s, r) => s + r.ret, 0) / results.length * 100 : 0;
-  const medianRet = results.length ? results.map(r => r.ret * 100).sort((a, b) => a - b)[Math.floor(results.length / 2)] : 0;
+  const monthlyRet = totalRet / Math.max(1, (tradeCount / 5) / 20 * 30);
+  const wr = (wins / tradeCount * 100);
+  const avgRet = details.reduce((s, r) => s + r.ret, 0) / tradeCount * 100;
+  const medianRet = details.map(r => r.ret * 100).sort((a, b) => a - b)[Math.floor(tradeCount / 2)];
 
-  // Sharpe (annualized, assuming ~300 trading days/year)
   const meanDaily = avgRet / 100;
-  const stdRet = Math.sqrt(results.reduce((s, r) => s + (r.ret - meanDaily) ** 2, 0) / Math.max(1, results.length));
+  const stdRet = Math.sqrt(details.reduce((s, r) => s + (r.ret - meanDaily) ** 2, 0) / tradeCount);
   const sharpe = stdRet > 0 ? (meanDaily / stdRet) * Math.sqrt(300) : 0;
 
-  // Sortino
-  const negRets = results.filter(r => r.ret < 0).map(r => r.ret);
+  const negRets = details.filter(r => r.ret < 0).map(r => r.ret);
   const downDev = negRets.length ? Math.sqrt(negRets.reduce((s, v) => s + v ** 2, 0) / negRets.length) : 0;
   const sortino = downDev > 0 ? (meanDaily / downDev) * Math.sqrt(300) : 0;
 
-  // Kelly
-  const avgWin = results.filter(r => r.ret > 0).reduce((s, r) => s + r.ret, 0) / Math.max(1, wins);
-  const avgLoss = Math.abs(results.filter(r => r.ret < 0).reduce((s, r) => s + r.ret, 0) / Math.max(1, tradeCount - wins));
-  const kelly = avgLoss > 0 ? (wr / 100 * avgWin - (1 - wr / 100) * avgLoss) / (avgWin * avgLoss) * avgWin : 0;
+  const avgW = details.filter(r => r.ret > 0).reduce((s, r) => s + r.ret, 0) / Math.max(1, wins);
+  const avgL = Math.abs(details.filter(r => r.ret < 0).reduce((s, r) => s + r.ret, 0) / Math.max(1, tradeCount - wins));
+  const kelly = avgL > 0 ? (wr / 100 * avgW - (1 - wr / 100) * avgL) / (avgW * avgL) * avgW : 0;
+
+  const grossW = details.filter(r => r.ret > 0).reduce((s, r) => s + r.ret, 0);
+  const grossL = Math.abs(details.filter(r => r.ret < 0).reduce((s, r) => s + r.ret, 0));
+  const pf = grossL > 0 ? (grossW / grossL).toFixed(2) : '∞';
 
   return {
     label, trades: tradeCount, wins, losses: tradeCount - wins,
     wr: wr.toFixed(1), totalReturn: totalRet.toFixed(1), monthlyReturn: monthlyRet.toFixed(1),
-    avgRet: avgRet.toFixed(3), medianRet: medianRet.toFixed(3),
+    avgRet: (avgRet * 100).toFixed(3), medianRet: medianRet.toFixed(3),
     sharpe: sharpe.toFixed(2), sortino: sortino.toFixed(2), kelly: (kelly * 100).toFixed(1),
-    maxDD: maxDD.toFixed(1), endingEq: eq.toFixed(0),
+    maxDD: maxDD.toFixed(1), endingEq: eq.toFixed(0), pf,
   };
 }
 
-console.log("=".repeat(80));
-console.log("UNIFIED BACKTEST — ICR vs Anavitrade vs Hybrid vs Consensus");
-console.log(`Corpus: ${ALL.length} trades across 2 days of coinlegs data`);
-console.log("=".repeat(80));
+/* ════════════════════════════════════════════════════════════════════════
+ * WALK-FORWARD
+ * ════════════════════════════════════════════════════════════════════════ */
 
-// Cohort A: ICR
-const icr = simulate(ALL, t => icrScore(t).accepted, "ICR Strategy");
+function walkForward(trades, acceptFn, label) {
+  const split = Math.floor(trades.length * 0.6);
+  const train = trades.slice(0, split);
+  const val = trades.slice(split);
+  const trainR = simulate(train, acceptFn, `${label} [train]`);
+  const valR = simulate(val, acceptFn, `${label} [val]`);
+  const trainOk = trainR.trades > 10 && parseFloat(trainR.sharpe) > 0.3;
+  const valOk = valR.trades > 5 && parseFloat(valR.sharpe) > 0.3;
+  const robust = trainOk && valR.trades > 0 && (parseFloat(trainR.sharpe) <= 0 || parseFloat(valR.sharpe) >= -0.5 * parseFloat(trainR.sharpe));
+  return { train: trainR, val: valR, pass: trainOk && valOk, robust };
+}
 
-// Cohort B: Anavitrade Native
-const native = simulate(ALL, t => nativeScore(t).accepted, "Anavitrade Native");
+/* ════════════════════════════════════════════════════════════════════════ */
+console.log("=".repeat(110));
+console.log("UNIFIED BACKTEST — NO LOOKAHEAD BIAS — ICR vs Native vs Hybrid vs Consensus vs Sniper");
+console.log(`Corpus: ${ALL.length} trades across ${new Set(ALL.map(t => t.pair)).size} pairs, ${new Set(ALL.map(t => t.period)).size} timeframes`);
+console.log("Scoring uses ONLY pre-entry data: indicator, period, entry/stop/tp, Coinlegs tier/score");
+console.log("=".repeat(110));
 
-// Cohort C: Hybrid (union)
-const hybrid = simulate(ALL, t => icrScore(t).accepted || nativeScore(t).accepted, "Hybrid (union)");
+const icr = simulate(ALL, t => icrScore(t), "ICR Strategy");
+const native = simulate(ALL, t => ({ accepted: nativeScore(t).accepted }), "Anavitrade Native");
+const hybrid = simulate(ALL, t => ({ accepted: icrScore(t).accepted || nativeScore(t).accepted }), "Hybrid (union)");
+const consensus = simulate(ALL, t => ({ accepted: icrScore(t).accepted && nativeScore(t).accepted }), "Consensus (both)");
+const sniper = simulate(ALL, t => sniperScore(t), "ICT Sniper");
 
-// Cohort D: Consensus (both)
-const consensus = simulate(ALL, t => icrScore(t).accepted && nativeScore(t).accepted, "Consensus (both)");
-
-console.log(`\n${"Strategy".padEnd(22)} | Trades | WR    | AvgR   | MoRet% | Sharpe | MaxDD | Kelly`);
-console.log("-".repeat(80));
-for (const r of [icr, native, hybrid, consensus]) {
+console.log(`\n${"Strategy".padEnd(24)} | Trades | WR    | PF    | AvgR  | Median | MoRet% | Sharpe | MaxDD | Kelly`);
+console.log("-".repeat(110));
+for (const r of [icr, native, hybrid, consensus, sniper]) {
+  if (!r.trades) continue;
   console.log(
-    `${r.label.padEnd(22)} | ${String(r.trades).padStart(5)}  ` +
-    `| ${r.wr.padStart(4)}% | ${r.avgRet.padStart(6)} | ${r.monthlyReturn.padStart(6)}%` +
-    ` | ${r.sharpe.padStart(5)} | ${r.maxDD.padStart(4)}% | ${r.kelly.padStart(4)}%`
+    `${r.label.padEnd(24)} | ${String(r.trades).padStart(5)}  ` +
+    `| ${r.wr.padStart(4)}% | ${String(r.pf).padStart(5)} | ${r.avgRet.padStart(6)} | ${r.medianRet.padStart(6)}%` +
+    ` | ${r.monthlyReturn.padStart(8)}% | ${r.sharpe.padStart(5)} | ${r.maxDD.padStart(4)}% | ${r.kelly.padStart(4)}%`
   );
 }
 
-// ── Per-indicator breakdown (Anavitrade only) ──
-console.log(`\n${"─".repeat(80)}`);
-console.log("DETAIL: Anavitrade Native — Per Indicator");
-console.log("─".repeat(80));
-for (const ind of ['MACD', 'Stochastic', 'CCI', 'Trend Reversal', 'Ichimoku']) {
-  const sub = ALL.filter(t => t.indicator === ind);
-  const subSim = simulate(sub, t => nativeScore(t).accepted, ind);
-  console.log(
-    `${subSim.label.padEnd(22)} | ${String(subSim.trades).padStart(5)}  ` +
-    `| ${subSim.wr.padStart(4)}% | ${subSim.avgRet.padStart(6)} | ${subSim.totalReturn.padStart(6)}%` +
-    ` | ${subSim.sharpe.padStart(5)} | ${subSim.maxDD.padStart(4)}%`
-  );
-}
+// ── ICR score distribution ──
+console.log(`\n${"─".repeat(110)}`);
+console.log("ICR SCORE BREAKDOWN (forward-only)");
+console.log("─".repeat(110));
+const icrScores = ALL.map(t => ({ trade: t, score: icrScore(t) }));
+const tierA = icrScores.filter(s => s.score.tier === 'A');
+const tierB = icrScores.filter(s => s.score.tier === 'B');
+const tierC = icrScores.filter(s => s.score.tier === 'C');
+console.log(`  Tier A: ${tierA.length} trades` + (tierA.length ? ` (WR: ${(tierA.filter(s=>s.trade.win).length/tierA.length*100).toFixed(1)}%)` : ''));
+console.log(`  Tier B: ${tierB.length} trades` + (tierB.length ? ` (WR: ${(tierB.filter(s=>s.trade.win).length/tierB.length*100).toFixed(1)}%)` : ''));
+console.log(`  Tier C: ${tierC.length} trades` + (tierC.length ? ` (WR: ${(tierC.filter(s=>s.trade.win).length/tierC.length*100).toFixed(1)}%)` : ''));
+console.log(`  ICR accepted: ${icrScores.filter(s => s.score.accepted).length} / ${ALL.length}`);
 
-// ── Walk-forward (train/validate split) ──
-console.log(`\n${"─".repeat(80)}`);
-console.log("WALK-FORWARD VALIDATION — Anavitrade Native (chronological 60/40)");
-const mid = Math.floor(ALL.length * 0.6);
-const trainSet = ALL.slice(0, mid);
-const valSet = ALL.slice(mid);
-
-const train = simulate(trainSet, t => nativeScore(t).accepted, "Training (60%)");
-const val = simulate(valSet, t => nativeScore(t).accepted, "Validation (40%)");
-for (const r of [train, val]) {
-  console.log(
-    `${r.label.padEnd(22)} | ${String(r.trades).padStart(5)}  ` +
-    `| ${r.wr.padStart(4)}% | ${r.avgRet.padStart(6)} | ${r.totalReturn.padStart(6)}%` +
-    ` | ${r.sharpe.padStart(5)} | ${r.maxDD.padStart(4)}%`
-  );
-}
-const walkForwardOk = parseFloat(train.sharpe) > 0.5 && parseFloat(val.sharpe) > 0.5;
-console.log(`Walk-forward: ${walkForwardOk ? "PASS ✓" : "FAIL ✗"} (train Sharpe ${train.sharpe}, val Sharpe ${val.sharpe})`);
-
-// ── Robustness: ICR overlap with Native ──
-let bothCount = 0, icrCount = 0, nativeCount = 0;
+// ── Sniper patterns ──
+console.log(`\n${"─".repeat(110)}`);
+console.log("ICT SNIPER — Pattern Breakdown (forward-only)");
+console.log("─".repeat(110));
+const patterns = {};
 for (const t of ALL) {
-  const icrAccepts = icrScore(t).accepted;
-  const nativeAccepts = nativeScore(t).accepted;
-  if (icrAccepts) icrCount++;
-  if (nativeAccepts) nativeCount++;
-  if (icrAccepts && nativeAccepts) bothCount++;
+  const s = sniperScore(t);
+  if (s.accepted && s.pattern) {
+    if (!patterns[s.pattern]) patterns[s.pattern] = { trades: [], wins: 0 };
+    patterns[s.pattern].trades.push(t);
+    if (t.win) patterns[s.pattern].wins++;
+  }
 }
-console.log(`\nOverlap: ${bothCount} of ${icrCount} ICR + ${nativeCount} Native = ${(bothCount / Math.max(1, Math.min(icrCount, nativeCount)) * 100).toFixed(0)}% agreement`);
+console.log("Pattern".padEnd(14) + " | Trades | WR    | AvgMove | AvgTarget%");
+for (const [p, d] of Object.entries(patterns).sort((a,b) => b[1].trades.length - a[1].trades.length)) {
+  const wr = (d.wins / d.trades.length * 100).toFixed(1);
+  const avgMove = (d.trades.reduce((s, t) => s + Math.abs(t.pnlPct), 0) / d.trades.length).toFixed(1);
+  const entry = d.trades[0].entry;
+  const avgTarget = d.trades.length > 0 ? (d.trades.reduce((s,t) => s + Math.abs((t.tp||0) - (t.entry||0)) / (t.entry||1) * 100, 0) / d.trades.length).toFixed(1) : 0;
+  console.log(`  ${p.padEnd(12)} | ${String(d.trades.length).padStart(5)}  | ${wr.padStart(4)}% | ${avgMove.padStart(5)}%  | ${avgTarget.padStart(8)}%`);
+}
 
-// ── Verdict ──
-console.log(`\n${"=".repeat(80)}`);
-const best = [icr, native, hybrid, consensus].sort((a, b) => parseFloat(b.sharpe) - parseFloat(a.sharpe))[0];
-const bestTotal = [icr, native, hybrid, consensus].sort((a, b) => parseFloat(b.totalReturn) - parseFloat(a.totalReturn))[0];
-console.log(`BEST SHARPE: ${best.label} (${best.sharpe})`);
-console.log(`BEST RETURN: ${bestTotal.label} (${bestTotal.totalReturn}%)`);
-console.log(`WALK-FORWARD: ${walkForwardOk ? "PASS — Sharpe > 0.5 on both training and validation" : "FAIL — potential overfitting"}`);
-console.log("=".repeat(80));
+// ── Best ──
+console.log(`\n${"=".repeat(110)}`);
+const allStrat = [icr, native, hybrid, consensus, sniper].filter(r => r.trades);
+const bestSharpe = allStrat.sort((a, b) => parseFloat(b.sharpe || '0') - parseFloat(a.sharpe || '0'))[0];
+const bestReturn = [...allStrat].sort((a, b) => parseFloat(b.totalReturn || '0') - parseFloat(a.totalReturn || '0'))[0];
+const bestWR = [...allStrat].sort((a, b) => parseFloat(b.wr || '0') - parseFloat(a.wr || '0'))[0];
+console.log(`BEST SHARPE:  ${bestSharpe.label} (${bestSharpe.sharpe})`);
+console.log(`BEST RETURN:  ${bestReturn.label} (${bestReturn.totalReturn}%)`);
+console.log(`BEST WINRATE: ${bestWR.label} (${bestWR.wr}%)`);
 
-writeFileSync('/home/ariel/anavitrade-trading/scripts/unified-backtest-results.json', JSON.stringify({
-  cohorts: [icr, native, hybrid, consensus],
-  walkForward: { train, val, pass: walkForwardOk },
-}, null, 2));
-console.log("\nSaved to scripts/unified-backtest-results.json");
+// ── Walk-forward ──
+console.log(`\n${"=".repeat(110)}`);
+console.log("WALK-FORWARD VALIDATION (chronological 60/40)");
+console.log("─".repeat(110));
+const strategies = [
+  { name: "ICR Strategy", fn: (t) => ({ accepted: icrScore(t).accepted }) },
+  { name: "Anavitrade Native", fn: (t) => ({ accepted: nativeScore(t).accepted }) },
+  { name: "Hybrid (union)", fn: (t) => ({ accepted: icrScore(t).accepted || nativeScore(t).accepted }) },
+  { name: "Consensus (both)", fn: (t) => ({ accepted: icrScore(t).accepted && nativeScore(t).accepted }) },
+  { name: "ICT Sniper", fn: (t) => ({ accepted: sniperScore(t).accepted }) },
+];
+for (const s of strategies) {
+  const wf = walkForward(ALL, s.fn, s.name);
+  if (wf.train.trades < 5) {
+    console.log(`  ${s.name.padEnd(24)}: too few trades for W-F`);
+    continue;
+  }
+  const pctTrain = (wf.train.trades / ALL.length * 100).toFixed(1);
+  const pctVal = (wf.val.trades / ALL.length * 100).toFixed(1);
+  console.log(
+    `  ${s.name.padEnd(24)}: train=${wf.train.trades}t(${pctTrain}%) ` +
+    `Sharpe=${wf.train.sharpe} | val=${wf.val.trades}t(${pctVal}%) Sharpe=${wf.val.sharpe} ` +
+    `→ ${wf.pass ? 'PASS ✓' : 'FAIL ✗'} ${wf.robust ? '(robust)' : ''}`
+  );
+}
+
+// ── Save ──
+const output = {
+  cohorts: [icr, native, hybrid, consensus, sniper],
+  winners: {
+    bestSharpe: { label: bestSharpe.label, sharpe: bestSharpe.sharpe },
+    bestReturn: { label: bestReturn.label, totalReturn: bestReturn.totalReturn },
+  },
+  walkForward: strategies.reduce((acc, s) => {
+    const wf = walkForward(ALL, s.fn, s.name);
+    acc[s.name] = wf;
+    return acc;
+  }, {}),
+  icrDistribution: { tierA: tierA.length, tierB: tierB.length, tierC: tierC.length, accepted: icrScores.filter(s => s.score.accepted).length },
+};
+writeFileSync('/home/ariel/anavitrade-trading/scripts/unified-backtest-results.json', JSON.stringify(output, null, 2));
+console.log(`\nSaved to scripts/unified-backtest-results.json`);

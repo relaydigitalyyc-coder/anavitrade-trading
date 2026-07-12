@@ -52,8 +52,19 @@ function classifyState(trade) {
   const timeframe = trade.period === '4h' ? '4h' : trade.period === '1h' ? '1h' : 'other';
   const absPnl = Math.abs(trade.pnlPct);
   const regime = trade.ddPct > 2.5 ? 'volatile' : (absPnl > 2 ? 'trend' : 'range');
-  const wrState = trade.win ? 'hot' : 'cold';
-  return { timeframe, regime, wrState };
+  return { timeframe, regime };
+}
+
+// Compute rolling WR from preceding N trades (prevents lookahead)
+function rollingWR(trades, idx, window = 20) {
+  const start = Math.max(0, idx - window);
+  const slice = trades.slice(start, idx);
+  if (slice.length === 0) return 0.5;
+  return slice.filter(t => t.win).length / slice.length;
+}
+
+function wrState(wr) {
+  return wr > 0.6 ? 'hot' : 'cold';
 }
 
 function computeReward(trade, action) {
@@ -67,7 +78,7 @@ function computeReward(trade, action) {
   return composite + Math.sign(trade.pnlPct) * action.mw * 0.1;
 }
 
-// Q-table
+// Q-table — trained ONLY on training data
 const Q = {};
 for (const s of STATES) {
   const key = `${s.timeframe}_${s.regime}_${s.wrState}`;
@@ -75,23 +86,38 @@ for (const s of STATES) {
   for (const a of ALL_ACTIONS) Q[key][a.id] = 0.0;
 }
 
+// Split data: 80% train chronological per pair
+const trainTrades = [], testTrades = [];
+const byPair = {};
+for (const t of trades) {
+  if (!byPair[t.pair]) byPair[t.pair] = [];
+  byPair[t.pair].push(t);
+}
+for (const [, pts] of Object.entries(byPair)) {
+  const split = Math.floor(pts.length * 0.8);
+  trainTrades.push(...pts.slice(0, split));
+  testTrades.push(...pts.slice(split));
+}
+console.log(`Data split: ${trainTrades.length} train, ${testTrades.length} test`);
+
 // Training
 const alpha = 0.15;
 const gamma = 0.7;
 const epsilon = 0.3;
 let episodeRewards = [];
 
-console.log("\nTraining for 500 episodes...");
+console.log("\nTraining for 500 episodes on TRAIN data...");
 for (let ep = 0; ep < 500; ep++) {
   let totalR = 0;
-  let shuffled = [...trades].sort(() => Math.random() - 0.5);
+  let shuffled = [...trainTrades].sort(() => Math.random() - 0.5);
 
   for (let i = 0; i < Math.min(200, shuffled.length); i++) {
     const t = shuffled[i];
     if (t.period === '5m' || t.pnlPct === 0) continue;
 
     const state = classifyState(t);
-    const stateKey = `${state.timeframe}_${state.regime}_${state.wrState}`;
+    const curWR = rollingWR(shuffled, i);
+    const stateKey = `${state.timeframe}_${state.regime}_${wrState(curWR)}`;
 
     // Epsilon-greedy action selection
     let action;
@@ -106,9 +132,9 @@ for (let ep = 0; ep < 500; ep++) {
     const reward = computeReward(t, action);
     totalR += reward;
 
-    // Compute next state (sliding window of last win/cold)
-    const nextWR = (i > 0 && shuffled[i-1]?.win) ? 'hot' : 'cold';
-    const nextStateKey = `${state.timeframe}_${state.regime}_${nextWR}`;
+    // Compute next state (rolling WR, not peeked outcome)
+    const nextWR = rollingWR(shuffled, i + 1);
+    const nextStateKey = `${state.timeframe}_${state.regime}_${wrState(nextWR)}`;
 
     // Q-learning update
     const currentQ = Q[stateKey][action.id];
@@ -149,22 +175,34 @@ for (const s of STATES) {
 console.log(`\nBEST OVERALL: ${bestStateAction.state.timeframe}/${bestStateAction.state.regime}/${bestStateAction.state.wrState}`);
 console.log(`  Action: thr=${bestStateAction.action.thr} cciW=${bestStateAction.action.cw} stochW=${bestStateAction.action.sw} microW=${bestStateAction.action.mw} Q=${bestQ.toFixed(2)}`);
 
-// Validate against structural 4h only
-console.log("\nVALIDATION — 4h structural trades with optimal zoom policy:");
+// Validate against held-out test data (last 20% chronological per pair)
+console.log(`\nVALIDATION — ${testTrades.length} held-out test trades (chronological 20%):`);
 let valTrades = 0, valWins = 0, valR = 0;
-for (const t of trades) {
+const testByPair = {};
+for (const t of testTrades) {
   if (t.period !== '4h') continue;
-  const state = classifyState(t);
-  const key = `${state.timeframe}_${state.regime}_${state.wrState}`;
-  const qs = Q[key];
-  const bestId = Object.keys(qs).reduce((a, b) => qs[a] > qs[b] ? a : b);
-  const action = ALL_ACTIONS.find(a => a.id === bestId);
-  const reward = computeReward(t, action);
+  if (!testByPair[t.pair]) testByPair[t.pair] = [];
+  testByPair[t.pair].push(t);
+}
+for (const [pair, pts] of Object.entries(testByPair)) {
+  // Bootstrap rolling WR from simulation (start neutral, update sequentially)
+  let pairWR = 0.5;
+  for (const t of pts) {
+    const state = classifyState(t);
+    const key = `${state.timeframe}_${state.regime}_${wrState(pairWR)}`;
+    const qs = Q[key];
+    const bestId = Object.keys(qs).reduce((a, b) => qs[a] > qs[b] ? a : b);
+    const action = ALL_ACTIONS.find(a => a.id === bestId);
+    const reward = computeReward(t, action);
 
-  if (reward > action.thr * 0.1) {
-    valR += reward; valTrades++; if (t.win) valWins++;
+    if (reward > action.thr * 0.1) {
+      valR += reward; valTrades++; if (t.win) valWins++;
+    }
+    // Update rolling WR (exponential moving window)
+    pairWR = (pairWR * 9 + (t.win ? 1 : 0)) / 10;
   }
 }
+console.log(`  Test: ${valTrades} trades, ${valWins} wins (${valTrades ? (valWins/valTrades*100).toFixed(0) : 0}% WR), avg ${valTrades ? (valR/valTrades).toFixed(2) : 0}R`);
 console.log(`  4h: ${valTrades} trades, ${valWins} wins (${(valWins/valTrades*100).toFixed(0)}% WR), avg ${(valR/valTrades).toFixed(2)}R`);
 
 // Save
