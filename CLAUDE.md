@@ -78,12 +78,101 @@ The smoke test verifies the dashboard wallet button, the WalletConnect/Reown pop
 - **Order mutex**: `execution/dispatch.ts` serializes order submission per `cexConnectionId` so a
   signer never has two in-flight orders. `ExecutionJob.idempotencyKey` prevents duplicate mirrors.
 
+## Planning Workflow (planning-with-files)
+
+This project uses **[planning-with-files](https://github.com/OthmanAdi/planning-with-files)** (v3.4.1)
+for persistent, Manus-style file-based planning. The skill is installed at
+`.claude/skills/planning-with-files/` and auto-loads on session start.
+
+### How It Works
+
+Three files in your project directory manage plan state across sessions and `/clear`:
+
+| File | Purpose |
+|------|---------|
+| `task_plan.md` | Master plan — phases, status, goals |
+| `progress.md` | Running log — what was done each step |
+| `findings.md` | Technical findings, decisions, trade-offs |
+
+The agent reads these files at the start of each turn and writes progress after
+each phase. The optional **completion gate** (`--gated` mode) holds the agent
+until the plan is actually done.
+
+### Quick Start (for any complex task)
+
+1. Create planning files (manually or via template):
+   ```
+   cp .claude/skills/planning-with-files/templates/task_plan.md .
+   cp .claude/skills/planning-with-files/templates/progress.md .
+   cp .claude/skills/planning-with-files/templates/findings.md .
+   ```
+2. Edit `task_plan.md` with your phases, goals, and acceptance criteria.
+3. Work normally — the agent maintains the files automatically.
+4. After `/clear` or restart, the agent auto-detects existing planning files
+   and runs `session-catchup.py` to restore context.
+
+### After a Crash or /clear
+
+The Restore Context hook runs automatically. If it doesn't fire:
+
+```bash
+python3 .claude/skills/planning-with-files/scripts/session-catchup.py "$(pwd)"
+git diff --stat
+```
+
+Then re-read the planning files — context is restored.
+
+### Session Recovery Snapshot
+
+At the end of an ICR/backtest session, the agent appends a `SESSION RECOVERY`
+block to `task_plan.md` with:
+- Last active phase
+- What changed (files modified, outputs generated)
+- What comes next
+- Key numbers (win rates, Sharpe ratios, totals)
+- Next-step command suggestion
+
+### Composing with Codex Orchestration
+
+For large multi-lens review/decomposition tasks, first create a task plan, then
+use `/codex:orchestrate` or `/codex:swarm review` to fan out across agents.
+The planning files keep both Claude and Codex aligned on the shared goal.
+
+### Backtest-Specific Planning
+
+For any new backtest campaign:
+1. `cp .claude/skills/planning-with-files/templates/task_plan.md backtest-plan-<name>.md`
+2. Record: corpus used, strategies tested, parameter sweeps, walk-forward results
+3. Save key findings to `findings.md`
+4. Append results to `docs/analysis/EMPIRICAL_FINDINGS.md`
+
 ## Guardrails
 
 - Keep this project standalone.
 - Do not delete `_manus`; it is the original source export reference.
 - Use `apply_patch` for manual edits.
 - Preserve the current dark trading UI unless a redesign is explicitly requested.
+
+## Backtest Corpus
+
+The backtest corpus lives in `scripts/backtest-prioritized.json` (1,265 trades,
+345 pairs, 5 timeframes). ALL scoring functions must use ONLY pre-entry data:
+indicator, period, pair, entry, stop, tp, tier, and Coinlegs score.
+
+**Never** use pnlPct, maxPct, ddPct, win, or outcome in entry decisions —
+those are lookahead bias.
+
+Key backtest scripts:
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/unified-backtest.mjs` | 5-strategy comparison (ICR, Native, Sniper, Hybrid, Consensus) |
+| `scripts/mtf-matrix-backtest.mjs` | 19-layer MTF detection matrix |
+| `scripts/train-sniper-zoom.mjs` | ML-trained sniper + zoom MDP policy |
+| `scripts/final-report.mjs` | Consolidated report generator |
+
+Best live configuration: **ICT Sniper (Rule-Based)** — 694 trades, 68% WR,
+Sharpe 7.00, walk-forward PASS.
 
 ## Codex + Claude Multi-Agent Orchestration
 

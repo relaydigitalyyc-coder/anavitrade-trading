@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "pi-planning-with-files": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": ".pi/skills/planning-with-files/SKILL.md",
+      "computedHash": "90986ba044b670ebf74d4890023dac17eaa1f54d43e42ac60e64f30b6e3df7a2"
+    },
+    "planning-with-files": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files/SKILL.md",
+      "computedHash": "ba5b740323fa46ffc6b15b6d952ab3e3a9809959daa964925e96481b0ed78cf3"
+    },
+    "planning-with-files-ar": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files-ar/SKILL.md",
+      "computedHash": "d7ed856351534f7c5bb8345c8d473240b1d4dd991799e88605e6e02dc006f661"
+    },
+    "planning-with-files-de": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files-de/SKILL.md",
+      "computedHash": "7fbe54df7307488f5f0d948d8816fb90053f80622333b4e9c92f9c640e89d1fe"
+    },
+    "planning-with-files-es": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files-es/SKILL.md",
+      "computedHash": "aa4cd123c81e8c24becb25f664b55c10f045ed38e3bde343ccc8cf5aecfd514a"
+    },
+    "planning-with-files-zh": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files-zh/SKILL.md",
+      "computedHash": "285ae12cc784191895e242bda531bc392c9705b2c7104061aaf56a1a1a8e65d6"
+    },
+    "planning-with-files-zht": {
+      "source": "othmanadi/planning-with-files",
+      "sourceType": "github",
+      "skillPath": "skills/planning-with-files-zht/SKILL.md",
+      "computedHash": "52b547eb2fff6cae0bd11772e1be86fab23669d301e2056d54c767b0a025dc07"
+    }
+  }
+}
