@@ -1,0 +1,15 @@
+{
+  "edge_status": "UNPROVEN",
+  "decision": "Do not deploy live. Continue research/data collection.",
+  "reason": "only 1 trades, need 100+; only 0 qualified coil events, need 100+; qualified coil pump rate unavailable; walk-forward test expectancy <= 0",
+  "min_required_trades": 100,
+  "min_required_qualified_coils": 100,
+  "baseline_trades": 1,
+  "baseline_expectancy_r": 2.8983769255583933,
+  "baseline_net_r": 2.8983769255583933,
+  "coil_qualified_events": 0,
+  "coil_pump_rate": null,
+  "walk_forward_test_expectancy_r": 0.0,
+  "hard_fail_count": 0,
+  "warning_count": 12
+}

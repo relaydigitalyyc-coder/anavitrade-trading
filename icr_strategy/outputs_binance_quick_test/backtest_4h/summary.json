@@ -1,0 +1,15 @@
+{
+  "total_trades": 2,
+  "wins": 0,
+  "losses": 2,
+  "breakevens": 0,
+  "win_rate_total": 0.0,
+  "net_r": -2.0303595184686056,
+  "expectancy_r": -1.0151797592343028,
+  "average_win_r": 0.0,
+  "average_loss_r": -1.0151797592343028,
+  "profit_factor_r": 0.0,
+  "max_drawdown_quote": 101.44582447301764,
+  "ending_equity": 9796.96404815314,
+  "skipped_signals": 1
+}

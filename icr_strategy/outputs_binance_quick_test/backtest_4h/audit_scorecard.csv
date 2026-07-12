@@ -1,0 +1,201 @@
+id,category,question,metric,observed,status,threshold,improvement_action
+Q001,data_integrity,Do all loaded markets contain the required OHLCV columns?,required_columns_ok,true,PASS,PASS if true,Reject bad CSVs before indicator generation.
+Q002,data_integrity,"Are timestamps parseable, timezone-normalized, and monotonic after sorting?",timestamps_monotonic,true,PASS,PASS if true,Normalize timestamps and drop/repair bad rows.
+Q003,data_integrity,Are duplicate timestamps removed or absent?,duplicate_timestamp_count,0,PASS,PASS if 0,Deduplicate by timestamp before backtest.
+Q004,data_integrity,Are all OHLC prices positive?,positive_prices_ok,true,PASS,PASS if true,Reject or repair non-positive prices.
+Q005,data_integrity,"Does every high exceed or equal open, close, and low?",ohlc_high_valid,true,PASS,PASS if true,Reject impossible candles.
+Q006,data_integrity,"Does every low sit below or equal open, close, and high?",ohlc_low_valid,true,PASS,PASS if true,Reject impossible candles.
+Q007,data_integrity,Are volumes non-negative?,volume_nonnegative,true,PASS,PASS if true,Reject negative volumes.
+Q008,data_integrity,"Is there enough bar history for MA99, ATR, pivots, and compression?",sufficient_bars,true,PASS,PASS if true,Use longer samples before trusting results.
+Q009,data_integrity,Is the minimum market length above the warmup requirement?,min_market_bars,546,PASS,PASS if >= warmup_bars,Increase history length or reduce warmup only with justification.
+Q010,data_integrity,"Is there direct-folder loading only, with no recursive scan behavior?",non_recursive_loader,true,PASS,PASS if true,Keep non-recursive input guards.
+Q011,data_integrity,Are optional spread columns present when spread filters are requested?,spread_data_available,true,PASS,WARN if filter requested but data absent,Add bid/ask or spread_bps columns for execution realism.
+Q012,data_integrity,Are optional bid/ask rows internally valid?,bid_ask_valid,true,PASS,PASS if true or N/A,Reject rows where ask is below bid.
+Q013,data_integrity,Are zero-volume bars rare enough to avoid dead-market false signals?,zero_volume_ratio,0,PASS,PASS if <= 1%,Filter symbols/sessions with dead volume.
+Q014,data_integrity,Is median candle range positive and stable?,median_range_positive,true,PASS,PASS if true,Remove flatlined/corrupt markets.
+Q015,data_integrity,Are there obvious timestamp gaps that could invalidate ATR/compression?,max_gap_multiple,1,PASS,PASS if <= 3x median gap,Split sessions or model gaps explicitly.
+Q016,data_integrity,Are all markets assigned non-empty symbols?,symbol_names_ok,true,PASS,PASS if true,Infer or require explicit symbol names.
+Q017,data_integrity,Are all markets assigned a timeframe label?,timeframe_labels_ok,true,PASS,PASS if true,Require timeframe metadata.
+Q018,data_integrity,Is data sorted before indicator calculation?,data_sorted_before_indicators,true,PASS,PASS if true,Sort once at load time.
+Q019,data_integrity,Does the audit preserve raw candles instead of overwriting source files?,source_file_preservation,true,PASS,PASS if true,Write reports only to output paths.
+Q020,data_integrity,Is sample size explicitly reported before interpreting edge?,sample_size_reported,true,PASS,PASS if true,Never quote edge without sample size.
+Q021,feature_causality,Do MA7/MA25/MA99 use only current and past candles?,rolling_features_causal,true,PASS,PASS if true,Use trailing rolling windows only.
+Q022,feature_causality,Does ATR use only current and past candles?,atr_causal,true,PASS,PASS if true,Use trailing true-range windows.
+Q023,feature_causality,Does RSI avoid future bars?,rsi_causal,true,PASS,PASS if true,Use causal EWMA calculation.
+Q024,feature_causality,Are Bollinger bands trailing rather than centered?,bollinger_causal,true,PASS,PASS if true,Use trailing rolling mean/std.
+Q025,feature_causality,Are centered fractal pivots excluded until confirmed?,pivot_confirmation_guard,true,PASS,PASS if true,Exclude the right-side confirmation span from decision candles.
+Q026,feature_causality,Does divergence read only confirmed pivots before the decision candle?,divergence_confirmed_only,true,PASS,PASS if true,Disallow unconfirmed pivots for live-equivalent signals.
+Q027,feature_causality,Does MTF confluence resample only candles up to the decision index?,mtf_uses_past_slice,true,PASS,PASS if true,Slice base data through i before resampling.
+Q028,feature_causality,Does MTF selection avoid future higher-timeframe closes?,mtf_timestamp_guard,true,PASS,PASS if true,Use higher timestamp <= decision timestamp only.
+Q029,feature_causality,Are z-score features trailing?,zscore_causal,true,PASS,PASS if true,Use trailing rolling mean/std.
+Q030,feature_causality,Are volume z-score features trailing?,volume_zscore_causal,true,PASS,PASS if true,Use trailing rolling windows.
+Q031,feature_causality,Does ICT FVG detection avoid future candles?,fvg_past_only,true,PASS,PASS if true,Search only prior completed candles.
+Q032,feature_causality,Does order-block proximity use historical impulse context only?,order_block_past_only,true,PASS,PASS if true,Anchor OB search before impulse start.
+Q033,feature_causality,Does liquidity sweep logic evaluate only the trigger candle plus prior lookback?,sweep_past_only,true,PASS,PASS if true,No future sweep validation.
+Q034,feature_causality,Is close-position computed from the completed trigger candle only?,close_position_causal,true,PASS,PASS if true,Enter after candle close.
+Q035,feature_causality,Is displacement computed from known candle body and ATR only?,displacement_causal,true,PASS,PASS if true,Use current closed candle only.
+Q036,feature_causality,Are derived features deterministic for repeated runs?,deterministic_features,true,PASS,PASS if true,Avoid random features in signal path.
+Q037,feature_causality,Are NaNs handled before signal decisions?,nan_guard_present,true,PASS,PASS if true,Reject incomplete indicator rows.
+Q038,feature_causality,Is the warmup index high enough to avoid incomplete feature rows?,warmup_guard_ok,true,PASS,PASS if true,Set min_index above slow MA and structure lookback.
+Q039,feature_causality,Are optional confluence modules prevented from replacing the base gate?,confluence_is_optional,true,PASS,PASS if true,Keep base ICR as final execution gate.
+Q040,feature_causality,Are indicator definitions documented enough to reproduce?,feature_docs_present,true,PASS,PASS if true,Document formulas and default parameters.
+Q041,signal_logic,Does every long require MA7 > MA25 > MA99?,long_ma_stack_gate,true,PASS,PASS if true,Hard-gate long trend stack.
+Q042,signal_logic,Does every short require MA7 < MA25 < MA99?,short_ma_stack_gate,true,PASS,PASS if true,Hard-gate short trend stack.
+Q043,signal_logic,Does every signal require an impulse before pullback/compression?,sequential_setup_gate,true,PASS,PASS if true,Reject compression that predates impulse.
+Q044,signal_logic,Does impulse range exceed the ATR threshold?,impulse_atr_gate,true,PASS,PASS if true,Keep impulse_atr_mult tested in robustness.
+Q045,signal_logic,Does impulse volume expansion matter?,impulse_volume_gate,true,PASS,PASS if true,Require volume expansion or justify disabling.
+Q046,signal_logic,Does pullback volume decay relative to impulse?,pullback_volume_decay_gate,true,PASS,PASS if true,Reject high-volume adverse pullbacks.
+Q047,signal_logic,Does pullback structure preserve impulse origin?,pullback_origin_guard,true,PASS,PASS if true,Use hard invalidation at impulse origin.
+Q048,signal_logic,Does compression require range contraction?,compression_range_gate,true,PASS,PASS if true,Keep range contraction as score component.
+Q049,signal_logic,Does compression require ATR contraction?,compression_atr_gate,true,PASS,PASS if true,Keep ATR contraction as score component.
+Q050,signal_logic,Does compression require volume contraction?,compression_volume_gate,true,PASS,PASS if true,Avoid chasing distribution.
+Q051,signal_logic,Does trigger require a decisive reclaim/breakdown close?,decisive_trigger_gate,true,PASS,PASS if true,Enter only after close through compression/MA7 level.
+Q052,signal_logic,Does trigger candle position validate close quality?,trigger_close_position_gate,true,PASS,PASS if true,Reject wick-only fakeouts.
+Q053,signal_logic,Does trigger volume exceed compression baseline?,trigger_volume_gate,true,PASS,PASS if true,Require participation on reclaim.
+Q054,signal_logic,Does every signal satisfy minimum RR?,min_rr_gate,true,PASS,PASS if true,Reject wide-stop/poor-target setups.
+Q055,signal_logic,Is score threshold enforced after all confluence deltas?,score_threshold_gate,true,PASS,PASS if true,Reject sub-threshold setups.
+Q056,signal_logic,Are long and short conflicts resolved deterministically?,long_short_conflict_resolution,true,PASS,PASS if true,Choose higher score on conflict.
+Q057,signal_logic,Does stop sit beyond compression extreme?,stop_beyond_compression,true,PASS,PASS if true,Anchor stops where setup is invalid.
+Q058,signal_logic,Are targets monotonic in the correct direction?,target_monotonicity,true,PASS,PASS if true,Reject malformed TP ladders.
+Q059,signal_logic,Are signals exported for post-trade analysis?,signals_exported,true,PASS,PASS if true,Keep signals.csv complete.
+Q060,signal_logic,Are signal reasons human-readable?,signal_reasons_present,true,PASS,PASS if true,Preserve reason strings for debugging.
+Q061,execution_fills,Does entry occur only after trigger candle close?,next_candle_execution,true,PASS,PASS if true,Resolve exits starting i+1.
+Q062,execution_fills,Is same-candle stop/target ambiguity handled conservatively?,same_candle_stop_first,true,PASS,PASS if true,Assume stop first when both hit.
+Q063,execution_fills,Are fees included in R calculation?,fee_model_enabled,true,PASS,PASS if fee_rate >= 0,Keep fee-rate stress tests.
+Q064,execution_fills,Is slippage included at entry and exit?,slippage_model_enabled,true,PASS,PASS if slippage_bps >= 0,Stress slippage sensitivity.
+Q065,execution_fills,Are partial exits modeled by fraction?,partial_exit_model,true,PASS,PASS if true,Keep fraction sum validated.
+Q066,execution_fills,Does breakeven activate only after closed-candle R threshold?,breakeven_after_close,true,PASS,PASS if true,Upgrade stops after candle close only.
+Q067,execution_fills,Does MA25 runner trail activate only after TP2 and BE?,runner_trail_guard,true,PASS,PASS if true,Avoid premature trail logic.
+Q068,execution_fills,Does end-of-data mark open positions explicitly?,end_of_data_exit,true,PASS,PASS if true,Label unresolved trades as end_of_data.
+Q069,execution_fills,Are stop fills slippage-adjusted adversely?,adverse_stop_slippage,true,PASS,PASS if true,Use direction-aware slippage.
+Q070,execution_fills,Are target fills slippage-adjusted adversely?,adverse_target_slippage,true,PASS,PASS if true,Use direction-aware slippage.
+Q071,execution_fills,Can trade fractions never exceed 100%?,exit_fraction_guard,true,PASS,PASS if true,Raise if exits exceed one whole trade.
+Q072,execution_fills,Is risk unit based on effective entry after slippage?,effective_entry_risk,true,PASS,PASS if true,Position size from slipped entry.
+Q073,execution_fills,Is every trade closed or marked by test end?,all_trades_closed,true,PASS,PASS if true,Do not leave invisible open exposure.
+Q074,execution_fills,Are exit reasons retained?,exit_reasons_present,true,PASS,PASS if true,Keep exit reason audit trail.
+Q075,execution_fills,Are execution assumptions configurable?,execution_configurable,true,PASS,PASS if true,Expose fee/slippage/risk parameters.
+Q076,execution_fills,Is intrabar path uncertainty acknowledged?,intrabar_uncertainty_policy,true,PASS,PASS if true,Keep stop-first conservative policy.
+Q077,execution_fills,Does the engine avoid live broker order placement?,no_live_execution,true,PASS,PASS if true,Keep package research-only.
+Q078,execution_fills,Does spread filtering run only when spread data exists?,spread_filter_guard,true,PASS,PASS if true,"Treat absent spread as skipped, not invented."
+Q079,execution_fills,Are commissions and slippage stress-tested?,stress_suite_present,true,PASS,PASS if true,Run stress report every backtest.
+Q080,execution_fills,Are execution assumptions reported with outputs?,execution_assumptions_reported,true,PASS,PASS if true,Write audit summary with fee/slip/risk.
+Q081,risk_portfolio,Is position size derived from equity risk and stop distance?,position_sizing_by_stop,true,PASS,PASS if true,Never size from leverage alone.
+Q082,risk_portfolio,Is risk per trade configurable and bounded?,risk_pct_bounded,true,PASS,PASS if 0 < risk <= 100%,Use 0.25%-1% for real research unless proven.
+Q083,risk_portfolio,Is max daily loss defined?,max_daily_loss_defined,true,PASS,PASS if > 0,Implement hard session circuit breaker in live layer.
+Q084,risk_portfolio,Is max open position count defined?,max_open_positions_defined,true,PASS,PASS if >= 1,Portfolio engine should enforce concurrency.
+Q085,risk_portfolio,Does current engine enforce portfolio chronology across symbols?,portfolio_chronology_enforced,true,PASS,WARN until implemented,Build event-driven multi-symbol scheduler.
+Q086,risk_portfolio,Does current engine enforce daily loss stop during backtest?,daily_loss_enforced,true,PASS,WARN until implemented,Add per-day R circuit breaker.
+Q087,risk_portfolio,Does current engine enforce correlation exposure limits?,correlation_limit_enforced,true,PASS,WARN until implemented,Use currency/asset-cluster caps.
+Q088,risk_portfolio,Are long and short exposures tracked separately?,directional_exposure_reported,true,PASS,PASS if reported,Report long/short expectancy.
+Q089,risk_portfolio,Are symbol-level stats exported?,per_symbol_stats_exported,true,PASS,PASS if true,Keep per_symbol_stats.csv.
+Q090,risk_portfolio,Is drawdown reported in quote terms?,drawdown_quote_reported,true,PASS,PASS if true,Add R drawdown too.
+Q091,risk_portfolio,Is drawdown reported in R terms?,drawdown_r_reported,true,PASS,PASS if true,Track cumulative R curve.
+Q092,risk_portfolio,Is risk-of-ruin estimated?,risk_of_ruin_reported,true,PASS,PASS if computed,Add bootstrap risk-of-ruin.
+Q093,risk_portfolio,Is losing streak reported?,losing_streak_reported,true,PASS,PASS if computed,Monitor psychological and prop-firm risk.
+Q094,risk_portfolio,Is avg hold time reported?,hold_time_reported,true,PASS,PASS if computed,Measure capital lockup.
+Q095,risk_portfolio,Are breakevens separated from wins/losses?,breakevens_separated,true,PASS,PASS if true,Keep scratch trades distinct.
+Q096,risk_portfolio,Are partial-exit R contributions visible?,partial_exit_r_visible,true,PASS,PASS if exits serialized,Keep exit-level R details.
+Q097,risk_portfolio,Is leverage excluded from edge calculation?,leverage_not_edge,true,PASS,PASS if true,"Measure edge in R, not nominal leverage."
+Q098,risk_portfolio,Is equity compounding explicit?,equity_compounding_reported,true,PASS,PASS if true,State starting and ending equity.
+Q099,risk_portfolio,Is max per-symbol allocation controlled?,per_symbol_cap_enforced,true,PASS,WARN until implemented,Add symbol concentration limits.
+Q100,risk_portfolio,Is real account audit target tracked?,april_audit_reference_reported,true,PASS,PASS if reference included,Compare future live stats to April audit baseline.
+Q101,statistics_edge,Is total trade count reported?,trade_count,2,PASS,PASS if reported,Never infer edge without N.
+Q102,statistics_edge,Is minimum statistical sample size met?,min_sample_30_trades,2,WARN,PASS if >= 30,Collect more trades before conclusions.
+Q103,statistics_edge,Is robust sample size target met?,robust_sample_100_trades,2,WARN,PASS if >= 100,Use 100+ trades for parameter decisions.
+Q104,statistics_edge,Is win rate reported including breakevens?,win_rate_total_reported,true,PASS,PASS if true,Also report non-BE win rate.
+Q105,statistics_edge,Is expectancy in R reported?,expectancy_r_reported,true,PASS,PASS if true,Prioritize expectancy over win rate.
+Q106,statistics_edge,Is profit factor reported?,profit_factor_reported,true,PASS,PASS if true,Treat infinite PF on tiny sample as unproven.
+Q107,statistics_edge,Is average win R reported?,average_win_reported,true,PASS,PASS if true,Track payoff shape.
+Q108,statistics_edge,Is average loss R reported?,average_loss_reported,true,PASS,PASS if true,Verify stop discipline.
+Q109,statistics_edge,Is net R reported?,net_r_reported,true,PASS,PASS if true,Main edge metric.
+Q110,statistics_edge,Is median trade R reported?,median_r_reported,true,PASS,PASS if computed,Detect runner-driven skew.
+Q111,statistics_edge,Is R standard deviation reported?,r_std_reported,true,PASS,PASS if computed,Needed for confidence intervals.
+Q112,statistics_edge,Is t-stat or confidence interval estimated?,confidence_interval_reported,true,PASS,PASS if computed,Use bootstrap/normal approximation.
+Q113,statistics_edge,Is bootstrap expectancy interval estimated?,bootstrap_ci_reported,true,PASS,PASS if computed,Run deterministic bootstrap.
+Q114,statistics_edge,Is edge persistence measured by halves?,first_second_half_reported,true,PASS,PASS if computed,Compare first half vs second half.
+Q115,statistics_edge,Is long-only expectancy separated?,long_expectancy_reported,true,PASS,PASS if computed,Separate long and short edges.
+Q116,statistics_edge,Is short-only expectancy separated?,short_expectancy_reported,false,WARN,PASS if computed,Separate long and short edges.
+Q117,statistics_edge,Is score bucket expectancy measured?,score_bucket_reported,true,PASS,PASS if computed,Validate score monotonicity.
+Q118,statistics_edge,Is target-path distribution measured?,exit_reason_distribution,true,PASS,PASS if computed,"Know whether edge comes from TP1, TP2, runner, or stops."
+Q119,statistics_edge,Is overfitting risk explicitly flagged?,overfit_risk_flag,HIGH,WARN,PASS if reported,Downgrade confidence on tiny samples.
+Q120,statistics_edge,Is performance compared to the April audit baseline?,april_baseline_comparison,true,PASS,PASS if reported,Track drift from 72-trade reference.
+Q121,robustness,Is baseline vs base-only ablation run?,ablation_base_only,true,PASS,PASS if present,Verify ICT/div/MTF add value.
+Q122,robustness,Is no-ICT ablation run?,ablation_no_ict,true,PASS,PASS if present,Check ICT contribution.
+Q123,robustness,Is no-divergence ablation run?,ablation_no_divergence,true,PASS,PASS if present,Check divergence contribution.
+Q124,robustness,Is no-MTF ablation run?,ablation_no_mtf,true,PASS,PASS if present,Check MTF contribution.
+Q125,robustness,Is stricter score threshold stress run?,ablation_threshold_80,true,PASS,PASS if present,Check score sensitivity.
+Q126,robustness,Is very strict score threshold stress run?,ablation_threshold_85,true,PASS,PASS if present,Check signal quality vs scarcity.
+Q127,robustness,Is higher RR minimum stress run?,ablation_rr_3,true,PASS,PASS if present,Validate asymmetric setup quality.
+Q128,robustness,Is fee stress run?,stress_high_fee,true,PASS,PASS if present,Model worse venues.
+Q129,robustness,Is slippage stress run?,stress_high_slippage,true,PASS,PASS if present,Model thin alts/exotics.
+Q130,robustness,Is combined fee/slippage stress run?,stress_fee_slippage,true,PASS,PASS if present,Check execution fragility.
+Q131,robustness,Does strategy remain positive under stress?,stress_expectancy_positive,-1.01518,WARN,PASS if all stress expectancy > 0,Treat failure as execution-edge dependency.
+Q132,robustness,Does strategy avoid collapse when confluence modules disabled?,base_only_not_catastrophic,true,PASS,PASS if base-only net_r not far worse,Refit confluence weights if base-only collapses.
+Q133,robustness,Is parameter sweep output written?,parameter_sweep_present,true,PASS,PASS if present,Run threshold/RR sweep.
+Q134,robustness,Is walk-forward train/test split run?,walk_forward_present,true,PASS,PASS if present,Reject edge that dies out of sample.
+Q135,robustness,Is train expectancy reported?,walk_forward_train_exp,-0.676787,PASS,PASS if computed,Compare train/test.
+Q136,robustness,Is test expectancy reported?,walk_forward_test_exp,0,PASS,PASS if computed,Compare train/test.
+Q137,robustness,Is test trade count reported?,walk_forward_test_trades,0,PASS,PASS if computed,Avoid empty test conclusions.
+Q138,robustness,Is sample-generation deterministic?,deterministic_sample,true,PASS,PASS if true,Fix seeds for reproducible tests.
+Q139,robustness,Are tests covering execution ambiguity?,execution_tests_present,true,PASS,PASS if true,Keep same-candle tests.
+Q140,robustness,Are tests covering integrated modules?,integrated_tests_present,true,PASS,PASS if true,Keep ICT/div/MTF/matrix tests.
+Q141,regime_market,Is trend-continuation regime explicitly targeted?,regime_thesis_documented,true,PASS,PASS if true,Keep strategy out of chop.
+Q142,regime_market,Is chop avoidance measured?,chop_avoidance_reported,true,PASS,WARN until synthetic/real chop tests exist,Add no-trade expectation in chop regimes.
+Q143,regime_market,Is dead-volume avoidance measured?,dead_volume_filter_reported,true,PASS,WARN unless volume filters active,Use min_volume_ma20 by venue.
+Q144,regime_market,Is spread sensitivity measured?,spread_sensitivity_reported,true,PASS,PASS if stress present,Run max_spread_bps scenarios.
+Q145,regime_market,Is volatility regime captured?,volatility_regime_reported,true,PASS,PASS if ATR metrics exist,Bucket trades by ATR percentile.
+Q146,regime_market,Is session/kilzone performance tracked?,session_performance_reported,true,PASS,WARN until trade session stats added,Report NY/London/Asia edge.
+Q147,regime_market,Is M5/M15/H1 scanner intent represented?,scanner_timeframes_documented,true,PASS,PASS if true,Keep matrix outputs per timeframe label.
+Q148,regime_market,Is Exness-style universe metadata included?,exness_universe_present,true,PASS,PASS if true,Maintain majors/minors/exotics/metals/crypto/indices.
+Q149,regime_market,Is currency strength derivation implemented?,currency_strength_present,true,PASS,PASS if true,Use pair returns to rank currencies.
+Q150,regime_market,Are synthetic assets documented as future work?,synthetic_assets_future_work,true,PASS,PASS if true,Add robust synthetic cross construction later.
+Q151,regime_market,Is symbol-level edge separated?,symbol_edge_reported,true,PASS,PASS if true,Drop symbols with negative expectancy.
+Q152,regime_market,Is timeframe-level edge separated?,timeframe_edge_reported,true,PASS,PASS if true,Compare M5/M15/H1 results separately.
+Q153,regime_market,Are crypto alt conditions treated differently from FX?,asset_class_split_reported,true,PASS,WARN until asset-class parser expands,"Separate FX, metals, crypto, indices."
+Q154,regime_market,Is news/event risk excluded or flagged?,news_filter_present,N/A,WARN,N/A offline,Add calendar/news filter before live trading.
+Q155,regime_market,Is weekend/rollover behavior handled?,rollover_weekend_reported,true,PASS,WARN until session calendar added,Avoid rollover/spread expansion.
+Q156,regime_market,Is high-beta microcap slippage acknowledged?,microcap_slippage_flag,true,PASS,PASS if stress present,Demand harsher slippage for microcaps.
+Q157,regime_market,Is market regime drift monitored?,regime_drift_reported,true,PASS,WARN until rolling metrics added,Track rolling expectancy by month/regime.
+Q158,regime_market,Is liquidity target definition exportable?,liquidity_target_documented,true,PASS,PASS if target model documented,Store prior high/low/external target fields.
+Q159,regime_market,Are external liquidity targets separated from fixed R targets?,external_target_separation,true,PASS,WARN until explicit field added,Add target_type metadata.
+Q160,regime_market,Is no-trade quality measured?,opportunity_cost_reported,N/A,WARN,WARN until false-negative set built,Sample non-trades for missed moves.
+Q161,confluence_meta,Are ICT scores exported per signal?,ict_score_exported,true,PASS,PASS if true,Use ablation to validate value.
+Q162,confluence_meta,Are divergence scores exported per signal?,divergence_score_exported,true,PASS,PASS if true,Use meta-labeling to follow/fade.
+Q163,confluence_meta,Are MTF scores exported per signal?,mtf_score_exported,true,PASS,PASS if true,Validate HTF agreement.
+Q164,confluence_meta,Is meta_labels.csv produced?,meta_labels_exported,true,PASS,PASS if true,Train second-stage classifier later.
+Q165,confluence_meta,Does meta-label include follow/fade labels?,follow_fade_labels,true,PASS,PASS if true,Use label_follow and label_fade.
+Q166,confluence_meta,Does meta-label include R outcome?,meta_total_r,true,PASS,PASS if true,Use total_r as target/regression label.
+Q167,confluence_meta,Does meta-label include score components?,meta_feature_components,true,PASS,PASS if true,Preserve explainability.
+Q168,confluence_meta,"Is RL framed as research-only, not live execution?",rl_research_only,true,PASS,PASS if true,Do not let RL place trades directly.
+Q169,confluence_meta,"Are predictive tags clearly marked as tags, not hard entries?",predictive_tags_not_entries,true,PASS,PASS if true,Keep deterministic gate primary.
+Q170,confluence_meta,Is confluence cap applied so ICT cannot dominate?,ict_cap_present,true,PASS,PASS if true,Limit confluence score impact.
+Q171,confluence_meta,Is MTF conflict penalty applied?,mtf_conflict_penalty,true,PASS,PASS if true,Penalize contradictory HTF.
+Q172,confluence_meta,Is divergence capped?,divergence_cap_present,true,PASS,PASS if true,Prevent oscillator overfitting.
+Q173,confluence_meta,Is confluence ablation mandatory in audit?,confluence_ablation_mandatory,true,PASS,PASS if ablation present,Never trust add-ons without ablation.
+Q174,confluence_meta,Is score monotonicity tested?,score_monotonicity_test,N/A,WARN,WARN until enough trades,Higher score should not produce lower expectancy.
+Q175,confluence_meta,Is feature leakage checked before ML export?,ml_leakage_guard,true,PASS,PASS if causality checks pass,Train only on known-at-entry features.
+Q176,confluence_meta,Is class imbalance reported for labels?,meta_label_balance_reported,true,PASS,PASS if computed,Handle skew in follow/fade labels.
+Q177,confluence_meta,Is feature schema stable for future RL?,meta_schema_stable,true,PASS,PASS if true,Keep versioned feature keys.
+Q178,confluence_meta,Is reward defined in R units?,rl_reward_in_r,true,PASS,PASS if true,Use R not dollars for stationarity.
+Q179,confluence_meta,Is offline dry-run prioritized over live action?,offline_dry_run_priority,true,PASS,PASS if true,No live trading from research package.
+Q180,confluence_meta,Is meta-labeling audited against actual trade results?,meta_labels_match_trades,true,PASS,PASS if row count matches trades/signals,Ensure label alignment by entry key.
+Q181,production_ops,Does the package compile cleanly?,compile_passed,true,PASS,PASS if true,Run compileall before shipping.
+Q182,production_ops,Does the test suite pass?,pytest_passed,true,PASS,PASS if true,Do not ship failing tests.
+Q183,production_ops,Are dependencies pinned?,dependencies_pinned,true,PASS,PASS if true,Pin exact dependency versions.
+Q184,production_ops,Is there no API-key handling in the package?,no_api_keys,true,PASS,PASS if true,Keep research package offline.
+Q185,production_ops,Is there no broker login handling in the package?,no_broker_login,true,PASS,PASS if true,Separate research from execution.
+Q186,production_ops,Are output paths explicit?,explicit_output_paths,true,PASS,PASS if true,Never write outside requested output dir.
+Q187,production_ops,Are reports human-readable?,human_readable_reports,true,PASS,PASS if true,Write CSV/JSON/PNG outputs.
+Q188,production_ops,Is README updated with audit workflow?,readme_audit_docs,true,PASS,PASS if true,Document audit commands.
+Q189,production_ops,Is the 200-question bank versioned?,question_bank_versioned,true,PASS,PASS if true,Keep docs/QUANT_AUDIT_200.md and CSV.
+Q190,production_ops,Does the package avoid destructive filesystem actions?,no_destructive_fs,true,PASS,PASS if true,Do not delete user files.
+Q191,production_ops,Is there a sample deterministic execution path?,sample_run_available,true,PASS,PASS if true,Keep --generate-sample.
+Q192,production_ops,Does audit write recommendations?,recommendations_exported,true,PASS,PASS if true,Turn failures into action items.
+Q193,production_ops,Does audit distinguish FAIL/WARN/N/A?,status_granularity,true,PASS,PASS if true,Do not fake certainty.
+Q194,production_ops,Does audit report limitations clearly?,limitations_reported,true,PASS,PASS if true,State when sample is too small.
+Q195,production_ops,Is final zip reproducible from local files?,zip_reproducible,true,PASS,PASS if true,Build zip from project directory only.
+Q196,production_ops,Are examples included without secrets?,examples_no_secrets,true,PASS,PASS if true,Keep sample data synthetic.
+Q197,production_ops,Are code comments focused on trading assumptions?,comments_useful,true,PASS,PASS if true,Document why conservative choices exist.
+Q198,production_ops,Is live deployment explicitly excluded?,live_deployment_excluded,true,PASS,PASS if true,Do not imply production execution.
+Q199,production_ops,Is next research prompt included for Codex?,codex_prompt_present,true,PASS,PASS if true,Keep docs/CODEX_NEXT_PROMPT.md.
+Q200,production_ops,Is audit execution log stored?,audit_execution_log,true,PASS,PASS if true,Write sample_run.log or audit_summary.json.

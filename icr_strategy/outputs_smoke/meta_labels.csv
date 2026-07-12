@@ -1,0 +1,2 @@
+symbol,timeframe,entry_time,direction,score,total_r,label_follow,label_fade,label_quality,features
+SAMPLE,1H,2026-01-06T18:00:00+00:00,long,100,2.8983769255583933,1,0,valid_follow,"{'trend_score': 20, 'impulse_score': 18, 'pullback_score': 12, 'compression_score': 10, 'trigger_score': 15, 'volume_score': 10, 'rr_score': 4, 'ict_score': 8, 'divergence_score': 5, 'mtf_score': 6, 'rr_to_tp1': 2.0}"

@@ -1,0 +1,4 @@
+symbol,timeframe,timestamp,close,coil_score,base_coil_score,coinlegs_alpha_score,coinlegs_bias,coinlegs_boost,coinlegs_details,coil_grade,range_contraction,atr_contraction,bb_squeeze,volume_dryup,higher_lows,high_pressure,ma_context,ma_squeeze_score,near_ma25_score,liquidity_overhead,reclaim_readiness,range_ratio,volume_ratio,distance_to_prior_high_pct,compression_high,compression_low
+SUIUSDT,4h,2026-06-30T20:00:00+00:00,0.6906,64.077,64.077,,missing,0.0,,watch,44.136,86.667,98.889,48.172,51.795,60.0,25.0,97.919,92.756,70.803,50.586,0.837965,0.647856,18.6649,0.7179,0.6586
+AVAXUSDT,4h,2026-06-30T20:00:00+00:00,6.538,61.575,61.575,,missing,0.0,,watch,30.901,78.333,62.778,36.878,60.122,53.426,90.0,88.961,97.707,89.696,45.702,1.036478,0.78903,7.8311,6.822,5.963
+SOLUSDT,4h,2026-06-30T20:00:00+00:00,73.67,50.024,50.024,,missing,0.0,,ignore,23.57,29.444,67.778,13.57,60.934,50.794,90.0,77.099,81.627,82.49,52.151,1.146455,1.080377,3.8279,76.49,65.91

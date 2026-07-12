@@ -1,0 +1,12 @@
+{
+  "report_schema": "ICR_REPORTS_v4",
+  "trade_count": 94,
+  "signal_count": 94,
+  "skipped_signal_count": 667,
+  "safety": {
+    "live_trading": false,
+    "broker_login": false,
+    "api_keys": false,
+    "recursive_file_scan": false
+  }
+}

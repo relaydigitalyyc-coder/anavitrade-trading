@@ -1,0 +1,21 @@
+{
+  "schema": "ICR_BINANCE_HTF_RUN_v1",
+  "symbols_requested": [
+    "SOLUSDT"
+  ],
+  "intervals_requested": [
+    "4h"
+  ],
+  "start_month": "2025-01",
+  "end_month": "2025-01",
+  "manifest": "/mnt/data/icr_strategy_v5_binance_htf/binance_attempt_outputs/binance_altcoin_manifest.csv",
+  "downloaded_csv_files": 0,
+  "downloaded_rows": 0,
+  "fetch_records": 2,
+  "intervals": {
+    "4h": {
+      "status": "no_data",
+      "message": "No CSVs downloaded for 4h."
+    }
+  }
+}

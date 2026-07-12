@@ -1,0 +1,11 @@
+{
+  "schema": "ICR_HTF_COILING_PUMP_RESEARCH_v1",
+  "markets": 1,
+  "events_scanned": 33,
+  "qualified_events": 33,
+  "threshold": 60.0,
+  "pump_threshold_pct": 8.0,
+  "pump_rate_all": 0.5151515151515151,
+  "pump_rate_qualified": 0.5151515151515151,
+  "avg_mfe_pct_qualified": 10.35853637912472
+}

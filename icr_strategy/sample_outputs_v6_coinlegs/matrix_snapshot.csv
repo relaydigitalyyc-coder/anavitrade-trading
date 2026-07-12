@@ -1,0 +1,2 @@
+symbol,timeframe,timestamp,close,trend,ma7,ma25,ma99,rsi14,volume_zscore,close_zscore20,long_predictive_tag,short_predictive_tag
+COILUSDT,4h,2024-02-23T04:00:00+00:00,30.78664210578561,bullish,29.79976270520162,27.083140610119326,19.456139570007416,50.0,1.647508942112255,1.7019072325659594,neutral,predictive_bollinger_rejection

@@ -1,0 +1,62 @@
+{
+  "audit_version": "ICR_QUANT_LITMUS_200_v7",
+  "audit_mode": "fast_structural",
+  "question_count": 200,
+  "status_counts": {
+    "PASS": 188,
+    "WARN": 12
+  },
+  "pass_rate_excluding_na": 0.94,
+  "hard_fail_count": 0,
+  "warning_count": 12,
+  "na_count": 0,
+  "sample_trades": 1,
+  "sample_markets": 1,
+  "baseline_summary": {
+    "total_trades": 1,
+    "wins": 1,
+    "losses": 0,
+    "breakevens": 0,
+    "win_rate_total": 1.0,
+    "net_r": 2.8983769255583933,
+    "expectancy_r": 2.8983769255583933,
+    "average_win_r": 2.8983769255583933,
+    "average_loss_r": 0.0,
+    "profit_factor_r": null,
+    "max_drawdown_quote": 0.0,
+    "ending_equity": 10289.837692555839,
+    "skipped_signals": 0
+  },
+  "key_metrics": {
+    "data_rows_total": 260,
+    "min_market_bars": 260,
+    "trade_count": 1,
+    "median_trade_r": 2.8983769255583933,
+    "r_std": null,
+    "bootstrap_expectancy_p05": null,
+    "bootstrap_expectancy_p95": null,
+    "stress_expectancy_positive": 2.8983769255583933,
+    "walk_forward_train_exp": 0.5030423061063258,
+    "walk_forward_test_exp": 0.0,
+    "walk_forward_test_trades": 0,
+    "max_losing_streak": 0,
+    "overfit_risk_flag": "HIGH"
+  },
+  "april_reference": {
+    "trades": 72,
+    "wins": 46,
+    "losses": 11,
+    "breakevens": 15,
+    "win_rate_total": 0.807,
+    "net_r": 94.33,
+    "expectancy_r": 1.66,
+    "risk_unit_usdt": 2.3419,
+    "isolated_leverage": "2.5x"
+  },
+  "limitations": [
+    "The bundled sample data is deterministic and tiny. It is useful for regression testing, not proving market edge.",
+    "News filters and a true external macro/event calendar remain out of scope for the offline research package; portfolio chronology, daily loss enforcement, correlation caps, and session reporting are implemented.",
+    "Confluence scores must be validated by exhaustive ablation on real M5/M15/H1 or 4H/1D historical data before increasing risk.",
+    "Fast structural audit mode reuses baseline results for ablation presence checks. Use --exhaustive-audit for real research decisions."
+  ]
+}

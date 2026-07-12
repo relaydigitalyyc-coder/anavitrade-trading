@@ -1,0 +1,7 @@
+symbol,segment,bars,total_trades,wins,losses,breakevens,win_rate_total,net_r,expectancy_r,average_win_r,average_loss_r,profit_factor_r,max_drawdown_quote,ending_equity,skipped_signals
+AVAXUSDT,train,327,1,0,1,0,0.0,-1.0159012737384223,-1.0159012737384223,0.0,-1.0159012737384223,0.0,0.0,9898.409872626158,0
+AVAXUSDT,test,219,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0
+SOLUSDT,train,327,1,0,1,0,0.0,-1.014458244730183,-1.014458244730183,0.0,-1.014458244730183,0.0,0.0,9898.554175526982,0
+SOLUSDT,test,219,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0
+SUIUSDT,train,327,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0
+SUIUSDT,test,219,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0

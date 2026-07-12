@@ -1,0 +1,3 @@
+symbol,segment,bars,total_trades,wins,losses,breakevens,win_rate_total,net_r,expectancy_r,average_win_r,average_loss_r,profit_factor_r,max_drawdown_quote,ending_equity,skipped_signals
+SAMPLE,train,156,1,1,0,0,1.0,0.5030423061063258,0.5030423061063258,0.5030423061063258,0.0,,0.0,10050.304230610633,0
+SAMPLE,test,104,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0

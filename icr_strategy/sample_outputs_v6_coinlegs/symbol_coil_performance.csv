@@ -1,0 +1,2 @@
+symbol,timeframe,qualified_events,pump_rate,avg_mfe_pct,avg_mae_pct,avg_close_return_pct,avg_coil_score
+COILUSDT,4h,36,0.5555555555555556,11.532270911704666,-0.587021817674714,9.722783644488636,86.23977777777777

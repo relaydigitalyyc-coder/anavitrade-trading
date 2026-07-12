@@ -1,0 +1,19 @@
+Fresh handoff verification performed before packaging:
+
+Command: pytest -q
+Result: 33 passed in 14.67s
+
+Command: python -m icr.main --generate-sample --output handoff_smoke_outputs --real-edge-report --no-audit
+Result: executed successfully and generated reports.
+
+Synthetic smoke summary:
+- total_trades: 1
+- wins: 1
+- net_r: 2.8983769255583933
+- ending_equity: 10289.837692555839
+
+Synthetic edge decision:
+- edge_status: UNPROVEN
+- reason: only 1 trade, need 100+; only 0 qualified coil events, need 100+; qualified coil pump rate unavailable; walk-forward test expectancy <= 0
+
+Real Binance/Coinlegs proof is still pending because prior environment attempts failed DNS resolution. This package is ready for local real-data execution.

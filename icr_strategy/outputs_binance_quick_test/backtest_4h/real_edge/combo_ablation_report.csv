@@ -1,0 +1,5 @@
+scenario,total_trades,wins,losses,breakevens,win_rate_total,net_r,expectancy_r,average_win_r,average_loss_r,profit_factor_r,max_drawdown_quote,ending_equity,skipped_signals
+base_icr_only,2,0,2,0,0.0,-2.0303595184686056,-1.0151797592343028,0.0,-1.0151797592343028,0.0,101.44582447301764,9796.96404815314,1
+icr_plus_htf_coil,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0
+icr_plus_coinlegs,2,0,2,0,0.0,-2.0303595184686056,-1.0151797592343028,0.0,-1.0151797592343028,0.0,101.44582447301764,9796.96404815314,1
+icr_plus_htf_coil_plus_coinlegs,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,10000.0,0

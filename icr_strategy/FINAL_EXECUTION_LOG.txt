@@ -1,0 +1,23 @@
+ICR Strategy v7 Real Edge
+
+Code execution:
+- python -m compileall -q icr tests: PASS
+- pytest -q: 33 passed in 19.30s
+
+Synthetic smoke execution:
+- python -m icr.main --generate-sample --output /mnt/data/icr_strategy_v7_exhaustive_sample --real-edge-report --exhaustive-audit --score-threshold 70 --coil-threshold 60 --pump-threshold 0.08 --no-shorts --no-audit
+- PASS
+- total_trades: 1
+- wins: 1
+- net_r: 2.8983769255583933
+- ending_equity: 10289.837692555839
+- edge_decision: UNPROVEN because synthetic sample has only 1 trade and 0 qualified coil events.
+
+Real Binance download attempt inside sandbox:
+- python -m icr.main --binance-htf --binance-symbols SOLUSDT,AVAXUSDT --binance-intervals 4h,1d --binance-start 2025-01 --binance-end 2025-01 --output /mnt/data/icr_strategy_v7_binance_attempt --real-edge-report --no-audit --binance-sleep 0 --no-shorts
+- Executed, but downloaded_csv_files: 0 and downloaded_rows: 0
+- Failure reason in binance_data/binance_fetch_log.json: URLError Temporary failure in name resolution.
+
+Important honesty note:
+- The repo now implements the real-data pipeline and the real-edge reporting layer.
+- The sandbox still cannot resolve external hosts for bulk Binance/Coinlegs downloads, so no real market edge is claimed from this environment.

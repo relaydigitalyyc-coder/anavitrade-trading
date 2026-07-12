@@ -1,0 +1,92 @@
+[
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": "2026-04",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-04.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": "2026-05",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-05.zip",
+    "status": "ok",
+    "rows": 186,
+    "message": ""
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": "2026-06",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2026-06.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "4h",
+    "month": "2026-04",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/AVAXUSDT/4h/AVAXUSDT-4h-2026-04.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "4h",
+    "month": "2026-05",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/AVAXUSDT/4h/AVAXUSDT-4h-2026-05.zip",
+    "status": "ok",
+    "rows": 186,
+    "message": ""
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "4h",
+    "month": "2026-06",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/AVAXUSDT/4h/AVAXUSDT-4h-2026-06.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  },
+  {
+    "symbol": "SUIUSDT",
+    "interval": "4h",
+    "month": "2026-04",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SUIUSDT/4h/SUIUSDT-4h-2026-04.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  },
+  {
+    "symbol": "SUIUSDT",
+    "interval": "4h",
+    "month": "2026-05",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SUIUSDT/4h/SUIUSDT-4h-2026-05.zip",
+    "status": "ok",
+    "rows": 186,
+    "message": ""
+  },
+  {
+    "symbol": "SUIUSDT",
+    "interval": "4h",
+    "month": "2026-06",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SUIUSDT/4h/SUIUSDT-4h-2026-06.zip",
+    "status": "ok",
+    "rows": 180,
+    "message": ""
+  }
+]

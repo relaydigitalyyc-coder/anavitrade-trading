@@ -1,0 +1,3 @@
+timestamp,exchange,symbol,source_url,error
+2026-07-06T03:24:58.965996+00:00,Binance,SOLUSDT,https://www.coinlegs.com/marketdetails/Binance/SOLUSDT,Could not fetch Coinlegs public page: <urlopen error [Errno -3] Temporary failure in name resolution>
+2026-07-06T03:25:03.967153+00:00,Binance,AVAXUSDT,https://www.coinlegs.com/marketdetails/Binance/AVAXUSDT,Could not fetch Coinlegs public page: <urlopen error [Errno -3] Temporary failure in name resolution>

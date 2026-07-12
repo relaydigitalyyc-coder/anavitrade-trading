@@ -1,0 +1,2 @@
+symbol,timeframe,timestamp,close,trend,ma7,ma25,ma99,rsi14,volume_zscore,close_zscore20,long_predictive_tag,short_predictive_tag
+SAMPLE,1H,2026-01-11T19:00:00+00:00,1.543938009620862,bullish,1.5385699094680274,1.5216371693510096,1.4372732314822816,84.04503570159144,0.8073239714290211,1.658759384756422,neutral,predictive_bollinger_rejection

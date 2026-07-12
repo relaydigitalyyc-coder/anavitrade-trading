@@ -1,0 +1,82 @@
+[
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": "2025-01",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2025-01.zip",
+    "status": "error",
+    "rows": 0,
+    "message": "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": null,
+    "source": "binance_archive",
+    "url": "",
+    "status": "no_rows_written",
+    "rows": 0,
+    "message": "No monthly archive rows downloaded for symbol/interval."
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "4h",
+    "month": "2025-01",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/AVAXUSDT/4h/AVAXUSDT-4h-2025-01.zip",
+    "status": "error",
+    "rows": 0,
+    "message": "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "4h",
+    "month": null,
+    "source": "binance_archive",
+    "url": "",
+    "status": "no_rows_written",
+    "rows": 0,
+    "message": "No monthly archive rows downloaded for symbol/interval."
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "1d",
+    "month": "2025-01",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/1d/SOLUSDT-1d-2025-01.zip",
+    "status": "error",
+    "rows": 0,
+    "message": "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "1d",
+    "month": null,
+    "source": "binance_archive",
+    "url": "",
+    "status": "no_rows_written",
+    "rows": 0,
+    "message": "No monthly archive rows downloaded for symbol/interval."
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "1d",
+    "month": "2025-01",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/AVAXUSDT/1d/AVAXUSDT-1d-2025-01.zip",
+    "status": "error",
+    "rows": 0,
+    "message": "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  {
+    "symbol": "AVAXUSDT",
+    "interval": "1d",
+    "month": null,
+    "source": "binance_archive",
+    "url": "",
+    "status": "no_rows_written",
+    "rows": 0,
+    "message": "No monthly archive rows downloaded for symbol/interval."
+  }
+]

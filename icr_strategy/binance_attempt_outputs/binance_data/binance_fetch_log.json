@@ -1,0 +1,22 @@
+[
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": "2025-01",
+    "source": "binance_archive",
+    "url": "https://data.binance.vision/data/spot/monthly/klines/SOLUSDT/4h/SOLUSDT-4h-2025-01.zip",
+    "status": "error",
+    "rows": 0,
+    "message": "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "interval": "4h",
+    "month": null,
+    "source": "binance_archive",
+    "url": "",
+    "status": "no_rows_written",
+    "rows": 0,
+    "message": "No monthly archive rows downloaded for symbol/interval."
+  }
+]

@@ -1,0 +1,13 @@
+id,category,status,metric,observed,improvement_action
+Q174,confluence_meta,WARN,score_monotonicity_test,N/A,Higher score should not produce lower expectancy.
+Q154,regime_market,WARN,news_filter_present,N/A,Add calendar/news filter before live trading.
+Q160,regime_market,WARN,opportunity_cost_reported,N/A,Sample non-trades for missed moves.
+Q092,risk_portfolio,WARN,risk_of_ruin_reported,false,Add bootstrap risk-of-ruin.
+Q102,statistics_edge,WARN,min_sample_30_trades,1,Collect more trades before conclusions.
+Q103,statistics_edge,WARN,robust_sample_100_trades,1,Use 100+ trades for parameter decisions.
+Q111,statistics_edge,WARN,r_std_reported,false,Needed for confidence intervals.
+Q112,statistics_edge,WARN,confidence_interval_reported,false,Use bootstrap/normal approximation.
+Q113,statistics_edge,WARN,bootstrap_ci_reported,false,Run deterministic bootstrap.
+Q114,statistics_edge,WARN,first_second_half_reported,false,Compare first half vs second half.
+Q116,statistics_edge,WARN,short_expectancy_reported,false,Separate long and short edges.
+Q119,statistics_edge,WARN,overfit_risk_flag,HIGH,Downgrade confidence on tiny samples.

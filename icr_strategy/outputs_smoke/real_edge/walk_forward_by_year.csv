@@ -1,0 +1,2 @@
+symbol,timeframe,year,bars,status,total_trades,wins,losses,breakevens,win_rate_total,net_r,expectancy_r,average_win_r,average_loss_r,profit_factor_r,max_drawdown_quote,ending_equity,skipped_signals
+SAMPLE,1H,2026,260,ok,1,1,0,0,1.0,2.8983769255583933,2.8983769255583933,2.8983769255583933,0.0,,0.0,10289.837692555839,0

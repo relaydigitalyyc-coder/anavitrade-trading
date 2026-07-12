@@ -1,0 +1,28 @@
+{
+  "schema": "ICR_BINANCE_HTF_RUN_v1",
+  "symbols_requested": [
+    "SOLUSDT",
+    "AVAXUSDT"
+  ],
+  "intervals_requested": [
+    "4h",
+    "1d"
+  ],
+  "start_month": "2025-01",
+  "end_month": "2025-01",
+  "manifest": "/mnt/data/icr_strategy_v7_binance_attempt/binance_altcoin_manifest.csv",
+  "coinlegs_paths": {},
+  "downloaded_csv_files": 0,
+  "downloaded_rows": 0,
+  "fetch_records": 8,
+  "intervals": {
+    "4h": {
+      "status": "no_data",
+      "message": "No CSVs downloaded for 4h."
+    },
+    "1d": {
+      "status": "no_data",
+      "message": "No CSVs downloaded for 1d."
+    }
+  }
+}

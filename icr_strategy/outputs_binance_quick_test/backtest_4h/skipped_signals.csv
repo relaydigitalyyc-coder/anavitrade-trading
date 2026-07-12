@@ -1,0 +1,2 @@
+symbol,timeframe,index,timestamp,direction,score,reason
+SOLUSDT,4h,238,2026-05-10T16:00:00+00:00,long,100,max_open_per_symbol

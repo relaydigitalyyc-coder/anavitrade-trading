@@ -1,0 +1,16 @@
+[project]
+name = "icr-strategy"
+version = "1.2.0"
+description = "Impulse Compression Reclaim trading research/backtesting system with Binance HTF coiling pumps, Coinlegs derivatives fusion, and 200-point quant audit."
+requires-python = ">=3.10"
+dependencies = [
+  "pandas==2.2.3",
+  "numpy==2.3.5",
+  "pydantic==2.13.4",
+  "matplotlib==3.10.8",
+  "scipy>=1.10.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

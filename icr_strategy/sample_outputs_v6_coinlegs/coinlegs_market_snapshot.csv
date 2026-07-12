@@ -1,0 +1,2 @@
+symbol,timeframe,coinlegs_alpha_score,coinlegs_bias,demand_velocity_score,leverage_expansion_score,funding_sanity_score,crowding_sanity_score,liquidation_activity_score,details
+COILUSDT,4h,81.772,bullish_derivative_accumulation,87.406,64.0,92.0,88.0,75.688,"demand=87.4, leverage=64.0, funding=92.0, crowd=88.0, liq=75.7, bias=bullish_derivative_accumulation"

@@ -1,0 +1,80 @@
+Client keeps custody on Ledger. You only get trade-execution permission, never withdrawal permission.
+
+Architecture:
+
+Client Ledger Nano
+   ↓ signs wallet connection / approvals
+Client Hyperliquid account
+   ↓ approves API / agent wallet
+Copytrade bot
+   ↓ mirrors your fills
+Client account opens proportional trades
+
+The Ledger should not be used to sign every copied trade. That would be too slow and defeats automation. The Ledger is the cold custody / approval wallet. The actual copy execution should run through a Hyperliquid API wallet / agent wallet.
+
+Hyperliquid API wallets are designed for this: a master account can approve agent wallets to sign on behalf of the account or subaccounts, and the docs warn to use separate API wallets per trading process/subaccount to avoid nonce collisions. Hyperliquid’s own API page also describes API wallets as agent wallets that can act on the account without withdrawal permissions.
+
+The clean client onboarding flow:
+
+Client buys/uses Ledger Nano
+Client creates their own wallet
+Client deposits USDC to their own Hyperliquid account
+Client creates/approves a dedicated Hyperliquid API wallet
+You run the copy engine using that API wallet
+Bot mirrors your trades by percentage risk, not raw size
+Client can revoke the API wallet anytime
+
+Never touch their seed phrase. Never ask them to send funds to your wallet. Never trade from their main private key.
+
+Best execution model:
+
+Your Hyperliquid account
+   ↓
+Bot watches your fills / positions
+   ↓
+Risk engine converts trade size:
+client_size = client_equity × your_risk_percent
+   ↓
+Bot sends order to client account through client API wallet
+
+Use percentage-based copying, not 1:1 notional copying. Example:
+
+Your account: $10,000
+Your trade risk: $200 = 2%
+
+Client account: $2,000
+Copied risk: $40 = 2%
+
+Do not copy leverage blindly. Copy the actual risk, max loss, invalidation distance, and margin impact.
+
+There are three possible structures:
+
+Structure	Best for	Problem
+API wallet copytrade	Cleanest client-controlled setup	You need bot infrastructure
+Hyperliquid vault	Pooled fund-style setup	More legal/asset-manager risk
+Builder code	Getting fee on fills	Not copytrading by itself
+
+Hyperliquid vaults can support onchain accounting and authorized agents, but that is closer to managing a fund, not simple client copytrading. Builder codes let users approve a builder fee and revoke it, but they are a fee mechanism, not a copytrade system.
+
+Ledger is good for the custody side. Ledger says Hyperliquid/HYPE support lets users send, receive, swap, and interact while keeping ownership of assets. But for live copytrading, the Ledger should only sign setup approvals, not every order.
+
+The safe operating rules:
+
+No client seed phrases.
+No client private keys.
+No deposits to your personal wallet.
+One API wallet per client.
+One bot process per API wallet.
+Client can revoke anytime.
+Max daily loss limit.
+Max leverage limit.
+Max position size limit.
+No martingale.
+No averaging down unless explicitly agreed.
+Emergency kill switch.
+Trade log visible to client.
+Written risk disclosure.
+
+The actual offer should be worded like:
+
+You keep full custody of your funds in your own Ledger-controlled Hyperliquid account. I never receive your seed phrase, private key, or withdrawal access. You authorize a limited Hyperliquid API wallet that allows trade execution only, so my system can mirror my trades proportionally on your account. You can revoke access at any time.
