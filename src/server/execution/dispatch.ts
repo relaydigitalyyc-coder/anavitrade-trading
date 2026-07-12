@@ -1,17 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import {
-  cexConnections, executionJobs, orderEvents, navSnapshots, tradeIntents, liveAccounts,
+  cexConnections, asterAgentAccounts, executionJobs, orderEvents, navSnapshots,
+  tradeIntents, liveAccounts,
 } from "../../drizzle/schema";
 import { getDb, writeAuditLog } from "../db";
 import { sha256Hex } from "../cex/signing";
 import { decryptCexCredentials } from "../cex/store";
 import { createCexClient } from "../cex/factory";
 import { CexExecutionAdapter } from "../cex/adapter";
+import { AsterExecutionAdapter } from "../aster/adapter";
 import { decideExecution, prefetchUserData, sizeNotionalFromEquity, type TradeIntentInput } from "./riskEngine";
 
 /** Deterministic idempotency key per (user, intent). Prevents duplicate mirrors. */
-async function idempotencyKey(userId: number, intentId: number): Promise<string> {
-  return (await sha256Hex(`cex:${userId}:${intentId}`)).slice(0, 32);
+async function idempotencyKey(userId: number, intentId: number, prefix = "cex"): Promise<string> {
+  return (await sha256Hex(`${prefix}:${userId}:${intentId}`)).slice(0, 32);
 }
 
 /** Serialize execution per connection so a signer never has two in-flight orders. */
@@ -40,19 +42,313 @@ async function loadIntent(intentId: number): Promise<TradeIntentInput | null> {
   };
 }
 
-/**
- * Fan a TradeIntent out to every eligible active CEX connection, creating one
- * ExecutionJob per user, mirroring the order, and recording order_events + a
- * nav_snapshot. Idempotent per (user, intent).
- *
- * Idempotency: uses INSERT ... ON CONFLICT ... DO NOTHING backed by a composite
- * unique index on (userId, idempotencyKey), eliminating the TOCTOU race present
- * in the old SELECT-then-INSERT pattern.
- *
- * Parallel fan-out: all connections are independent (different API keys/exchanges),
- * so Promise.allSettled processes them concurrently. Order submission remains
- * serialized per connection via enqueue() to prevent nonce issues.
- */
+/* ═══════════════════════════════════════════════════════════════════
+ * CEX FAN-OUT – mirrors the intent to every active CEX connection
+ * ═══════════════════════════════════════════════════════════════════ */
+
+async function fanOutCex(
+  intent: TradeIntentInput,
+  intentId: number,
+  connections: Array<typeof cexConnections.$inferSelect>,
+  preloaded: Awaited<ReturnType<typeof prefetchUserData>> | undefined,
+) {
+  const db = getDb();
+  const results: Array<{ userId: number; exchange: string; status: string; reason?: string; jobId?: number }> = [];
+
+  for (const conn of connections) {
+    const decision = await decideExecution(intent, conn.userId, conn, preloaded);
+    if (decision.approved !== true) {
+      const reason = "reason" in decision ? decision.reason : "unknown";
+      await writeAuditLog(conn.userId, "EXEC_RISK_SKIPPED", `intent:${intentId}; cex:${conn.exchange}; reason:${reason}`);
+      results.push({ userId: conn.userId, exchange: conn.exchange, status: "skipped", reason });
+      continue;
+    }
+
+    const idem = await idempotencyKey(conn.userId, intentId, "cex");
+
+    await db.insert(executionJobs).values({
+      tradeIntentId: intentId,
+      userId: conn.userId,
+      cexConnectionId: conn.id,
+      provider: "cex",
+      symbol: intent.symbol,
+      side: intent.side,
+      orderType: intent.orderType,
+      status: "queued",
+      idempotencyKey: idem,
+    } as any).onConflictDoNothing();
+
+    const [job] = await db.select().from(executionJobs)
+      .where(and(eq(executionJobs.userId, conn.userId), eq(executionJobs.idempotencyKey, idem)))
+      .limit(1);
+    if (!job || job.status !== "queued") {
+      results.push({ userId: conn.userId, exchange: conn.exchange, status: job ? "duplicate" : "skipped" });
+      continue;
+    }
+
+    // Size the order
+    let notionalUsd = decision.notionalUsd;
+    let quantity: string | undefined;
+    try {
+      const creds = await decryptCexCredentials(conn);
+      const client = createCexClient(conn.exchange, creds);
+      const balance = await client.validateAndReadBalance();
+      const [account] = await db.select().from(liveAccounts).where(eq(liveAccounts.userId, conn.userId)).limit(1);
+      const maxPct = parseFloat(account?.maxPositionSizePct ?? "10");
+      if (notionalUsd <= 0) notionalUsd = sizeNotionalFromEquity(balance.availableUsd || balance.equityUsd, maxPct);
+
+      const priceHint = parseFloat(intent.limitPrice ?? "0");
+      if (priceHint > 0) {
+        quantity = (notionalUsd / priceHint).toFixed(6);
+      } else {
+        try {
+          const pos = await client.getPositions(intent.symbol);
+          const ticker = pos.length > 0 ? pos[0].entryPrice : 0;
+          const fallback = ticker > 0 ? ticker : 1000;
+          if (fallback > 0) quantity = (notionalUsd / fallback).toFixed(6);
+        } catch {
+          if (intent.limitPrice) quantity = (notionalUsd / parseFloat(intent.limitPrice)).toFixed(6);
+        }
+      }
+    } catch (e: any) {
+      results.push({ userId: conn.userId, exchange: conn.exchange, status: "skipped", reason: `balance_failed:${e?.message}` });
+      continue;
+    }
+
+    if (!quantity || parseFloat(quantity) <= 0) {
+      results.push({ userId: conn.userId, exchange: conn.exchange, status: "skipped", reason: "zero_quantity" });
+      continue;
+    }
+
+    await db.update(executionJobs).set({
+      notionalUsd: notionalUsd.toFixed(2), quantity, leverage: decision.leverage,
+      limitPrice: intent.limitPrice ?? null, updatedAt: new Date(),
+    } as any).where(eq(executionJobs.id, job.id));
+
+    // Submit with retry
+    await enqueue(conn.id, async () => {
+      let attempts = 0;
+      const maxAttempts = 3;
+      const backoff = [1000, 2000, 4000];
+      let lastError: Error | undefined;
+
+      while (attempts < maxAttempts) {
+        try {
+          attempts++;
+          const adapter = new CexExecutionAdapter(conn.id);
+          const receipt = await adapter.submitOrder(job.id, {
+            symbol: intent.symbol, side: intent.side, type: intent.orderType,
+            quantity, price: intent.limitPrice ?? undefined,
+            leverage: decision.leverage,
+            stopLossPrice: intent.stopLossPrice ?? undefined,
+            takeProfitPrice: intent.takeProfitPrice ?? undefined,
+            clientOrderId: idem,
+          });
+
+          await db.update(executionJobs).set({
+            status: receipt.status === "filled" ? "filled" : "submitted",
+            orderId: receipt.orderId, submittedAt: new Date(),
+            ...(receipt.status === "filled" ? { filledAt: new Date() } : {}),
+            updatedAt: new Date(),
+          } as any).where(eq(executionJobs.id, job.id));
+
+          await db.insert(orderEvents).values({
+            executionJobId: job.id, provider: "cex", eventType: receipt.status,
+            payloadJson: JSON.stringify({ raw: receipt.raw ?? {}, attempt: attempts }),
+          } as any);
+
+          // NAV snapshot best-effort
+          try {
+            const creds2 = await decryptCexCredentials(conn);
+            const client2 = createCexClient(conn.exchange, creds2);
+            const bal = await client2.validateAndReadBalance();
+            await db.insert(navSnapshots).values({
+              userId: conn.userId, provider: "cex",
+              accountEquityUsd: bal.equityUsd.toFixed(2),
+              availableBalanceUsd: bal.availableUsd.toFixed(2), source: "provider_sync",
+            } as any);
+          } catch { /* best-effort */ }
+
+          await writeAuditLog(conn.userId, "EXEC_ORDER_SUBMITTED",
+            `intent:${intentId}; cex:${receipt.orderId}; ${conn.exchange}; attempt:${attempts}`);
+          return;
+        } catch (e: any) {
+          lastError = e;
+          if (attempts < maxAttempts) {
+            const delay = backoff[attempts - 1];
+            console.warn(`[dispatch] CEX attempt ${attempts}/${maxAttempts} failed for job ${job.id}, retrying in ${delay}ms: ${e?.message}`);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+      }
+
+      await db.update(executionJobs).set({
+        status: "error", errorMessage: String(lastError?.message).slice(0, 300), updatedAt: new Date(),
+      } as any).where(eq(executionJobs.id, job.id));
+      await db.insert(orderEvents).values({
+        executionJobId: job.id, provider: "cex", eventType: "rejected",
+        payloadJson: JSON.stringify({ error: String(lastError?.message).slice(0, 300), attempts }),
+      } as any);
+      await writeAuditLog(conn.userId, "EXEC_ORDER_FAILED",
+        `intent:${intentId}; ${String(lastError?.message).slice(0, 120)}; attempts:${attempts}`);
+    });
+
+    results.push({ userId: conn.userId, exchange: conn.exchange, jobId: job.id, status: "queued" });
+  }
+
+  return results;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * ASTER FAN-OUT – mirrors the intent to every active Aster agent
+ * ═══════════════════════════════════════════════════════════════════ */
+
+async function fanOutAster(
+  intent: TradeIntentInput,
+  intentId: number,
+) {
+  const db = getDb();
+  const agents = await db.select().from(asterAgentAccounts)
+    .where(eq(asterAgentAccounts.status, "active"));
+
+  const results: Array<{ userId: number; provider: string; status: string; reason?: string; jobId?: number }> = [];
+
+  for (const agent of agents) {
+    const decision = await decideExecution(intent, agent.userId, { id: agent.userId } as any, undefined);
+    if (decision.approved !== true) {
+      const reason = "reason" in decision ? decision.reason : "unknown";
+      await writeAuditLog(agent.userId, "EXEC_RISK_SKIPPED", `intent:${intentId}; aster; reason:${reason}`);
+      results.push({ userId: agent.userId, provider: "aster", status: "skipped", reason });
+      continue;
+    }
+
+    const idem = await idempotencyKey(agent.userId, intentId, "aster");
+
+    await db.insert(executionJobs).values({
+      tradeIntentId: intentId,
+      userId: agent.userId,
+      asterAgentAccountId: agent.id,
+      provider: "aster",
+      symbol: intent.symbol,
+      side: intent.side,
+      orderType: intent.orderType,
+      status: "queued",
+      idempotencyKey: idem,
+    } as any).onConflictDoNothing();
+
+    const [job] = await db.select().from(executionJobs)
+      .where(and(eq(executionJobs.userId, agent.userId), eq(executionJobs.idempotencyKey, idem)))
+      .limit(1);
+    if (!job || job.status !== "queued") {
+      results.push({ userId: agent.userId, provider: "aster", status: job ? "duplicate" : "skipped" });
+      continue;
+    }
+
+    // Compute notional from the live account's unified balance
+    let notionalUsd = decision.notionalUsd;
+    try {
+      const [account] = await db.select().from(liveAccounts)
+        .where(eq(liveAccounts.userId, agent.userId)).limit(1);
+      const equity = parseFloat(account?.lastTotalEquityUsd ?? "0");
+      if (equity > 0 && notionalUsd <= 0) {
+        const maxPct = parseFloat(account?.maxPositionSizePct ?? "10");
+        notionalUsd = sizeNotionalFromEquity(equity, maxPct);
+      }
+    } catch { /* fall through */ }
+
+    const priceHint = parseFloat(intent.limitPrice ?? "0");
+    const quantity = priceHint > 0 ? (notionalUsd / priceHint).toFixed(6) : (notionalUsd / 1000).toFixed(6);
+    if (!quantity || parseFloat(quantity) <= 0) {
+      results.push({ userId: agent.userId, provider: "aster", status: "skipped", reason: "zero_quantity" });
+      continue;
+    }
+
+    await db.update(executionJobs).set({
+      notionalUsd: notionalUsd.toFixed(2), quantity, leverage: decision.leverage,
+      limitPrice: intent.limitPrice ?? null, updatedAt: new Date(),
+    } as any).where(eq(executionJobs.id, job.id));
+
+    // Submit via Aster adapter with retry
+    await enqueue(agent.id, async () => {
+      let attempts = 0;
+      const maxAttempts = 3;
+      const backoff = [1000, 2000, 4000];
+      let lastError: Error | undefined;
+
+      while (attempts < maxAttempts) {
+        try {
+          attempts++;
+          const adapter = new AsterExecutionAdapter(agent.id);
+          const receipt = await adapter.submitOrder(job.id, {
+            symbol: intent.symbol, side: intent.side, type: intent.orderType,
+            quantity, price: intent.limitPrice ?? undefined,
+            leverage: decision.leverage,
+            stopLossPrice: intent.stopLossPrice ?? undefined,
+            takeProfitPrice: intent.takeProfitPrice ?? undefined,
+          });
+
+          await db.update(executionJobs).set({
+            status: receipt.status === "filled" ? "filled" : "submitted",
+            orderId: receipt.orderId, submittedAt: new Date(),
+            ...(receipt.status === "filled" ? { filledAt: new Date() } : {}),
+            updatedAt: new Date(),
+          } as any).where(eq(executionJobs.id, job.id));
+
+          await db.insert(orderEvents).values({
+            executionJobId: job.id, provider: "aster", eventType: receipt.status,
+            payloadJson: JSON.stringify({ raw: receipt.raw ?? {}, attempt: attempts }),
+          } as any);
+
+          // NAV snapshot best-effort (Aster doesn't expose balance; use unified cache)
+          try {
+            const [account] = await db.select().from(liveAccounts)
+              .where(eq(liveAccounts.userId, agent.userId)).limit(1);
+            if (account) {
+              await db.insert(navSnapshots).values({
+                userId: agent.userId, provider: "aster",
+                accountEquityUsd: account.lastTotalEquityUsd ?? "0",
+                availableBalanceUsd: account.lastAvailableUsd ?? "0",
+                source: "provider_sync",
+              } as any);
+            }
+          } catch { /* best-effort */ }
+
+          await writeAuditLog(agent.userId, "EXEC_ORDER_SUBMITTED",
+            `intent:${intentId}; aster:${receipt.orderId}; attempt:${attempts}`);
+          return;
+        } catch (e: any) {
+          lastError = e;
+          if (attempts < maxAttempts) {
+            const delay = backoff[attempts - 1];
+            console.warn(`[dispatch] Aster attempt ${attempts}/${maxAttempts} failed for job ${job.id}, retrying in ${delay}ms: ${e?.message}`);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+      }
+
+      await db.update(executionJobs).set({
+        status: "error", errorMessage: String(lastError?.message).slice(0, 300), updatedAt: new Date(),
+      } as any).where(eq(executionJobs.id, job.id));
+      await db.insert(orderEvents).values({
+        executionJobId: job.id, provider: "aster", eventType: "rejected",
+        payloadJson: JSON.stringify({ error: String(lastError?.message).slice(0, 300), attempts }),
+      } as any);
+      await writeAuditLog(agent.userId, "EXEC_ORDER_FAILED",
+        `intent:${intentId}; aster; ${String(lastError?.message).slice(0, 120)}; attempts:${attempts}`);
+    });
+
+    results.push({ userId: agent.userId, provider: "aster", jobId: job.id, status: "queued" });
+  }
+
+  return results;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * MAIN ENTRY POINT
+ * Fans out a TradeIntent to BOTH active CEX connections AND active
+ * Aster agents. Each provider path is independent.
+ * ═══════════════════════════════════════════════════════════════════ */
+
 export async function createExecutionJobsForIntent(intentId: number) {
   const db = getDb();
   const intent = await loadIntent(intentId);
@@ -61,175 +357,31 @@ export async function createExecutionJobsForIntent(intentId: number) {
   const connections = await db.select().from(cexConnections)
     .where(eq(cexConnections.status, "active"));
 
-  // Pre-fetch risk data for all user IDs to eliminate N+1 inside the loop.
-  const userIds = [...new Set(connections.map((c) => c.userId))];
-  const preloaded = userIds.length > 0 ? await prefetchUserData(userIds) : undefined;
+  // Pre-fetch CEX risk data
+  const cexUserIds = [...new Set(connections.map((c) => c.userId))];
+  const preloaded = cexUserIds.length > 0 ? await prefetchUserData(cexUserIds) : undefined;
 
-  // Fan out to all active connections in parallel.
-  const settled = await Promise.allSettled(
-    connections.map(async (conn) => {
-      const decision = await decideExecution(intent, conn.userId, conn, preloaded);
-      if (decision.approved !== true) {
-        const reason = "reason" in decision ? decision.reason : "unknown";
-        await writeAuditLog(conn.userId, "EXEC_RISK_SKIPPED", `intent:${intentId}; reason:${reason}`);
-        return { userId: conn.userId, exchange: conn.exchange, status: "skipped" as const, reason };
-      }
-
-      const idem = await idempotencyKey(conn.userId, intentId);
-
-      // Atomic idempotency: INSERT with the composite unique index on
-      // (userId, idempotencyKey). If the pair already exists the row is
-      // silently ignored — no TOCTOU race.
-      await db.insert(executionJobs).values({
-        tradeIntentId: intentId,
-        userId: conn.userId,
-        cexConnectionId: conn.id,
-        provider: "cex",
-        symbol: intent.symbol,
-        side: intent.side,
-        orderType: intent.orderType,
-        status: "queued",
-        idempotencyKey: idem,
-      } as any).onConflictDoNothing();
-
-      // Query the row (freshly inserted or pre-existing).
-      const [job] = await db.select().from(executionJobs)
-        .where(and(eq(executionJobs.userId, conn.userId), eq(executionJobs.idempotencyKey, idem)))
-        .limit(1);
-      if (!job) return { userId: conn.userId, exchange: conn.exchange, status: "skipped" as const, reason: "idempotency_lookup_failed" };
-
-      // If status already moved past queued, a prior run processed this job.
-      if (job.status !== "queued") {
-        return { userId: conn.userId, exchange: conn.exchange, jobId: job.id, status: "duplicate" as const };
-      }
-
-      // Size the order from account equity if the intent carried no explicit notional.
-      let notionalUsd = decision.notionalUsd;
-      let quantity: string | undefined;
+  // Fan out to CEX and Aster in parallel
+  const [cexResults, asterResults] = await Promise.all([
+    Promise.allSettled(
+      connections.map(async (conn) => {
+        const r = await fanOutCex(intent, intentId, [conn], preloaded);
+        return r[0] ?? { userId: conn.userId, exchange: conn.exchange, status: "error" as const };
+      }),
+    ),
+    (async () => {
       try {
-        const creds = await decryptCexCredentials(conn);
-        const client = createCexClient(conn.exchange, creds);
-        const balance = await client.validateAndReadBalance();
-        const [account] = await db.select().from(liveAccounts).where(eq(liveAccounts.userId, conn.userId)).limit(1);
-        const maxPct = parseFloat(account?.maxPositionSizePct ?? "10");
-        if (notionalUsd <= 0) notionalUsd = sizeNotionalFromEquity(balance.availableUsd || balance.equityUsd, maxPct);
-
-        // Use the intent's limitPrice (signal price) as a sizing hint. For MARKET
-        // orders on Binance, quoteOrderQty handles this automatically; for BITUNIX
-        // we fall back to the ticker price to avoid quantity=0.
-        const priceHint = parseFloat(intent.limitPrice ?? "0");
-        if (priceHint > 0) {
-          quantity = (notionalUsd / priceHint).toFixed(6);
-        } else {
-          // Fetch current mark price for MARKET orders with no stored hint
-          try {
-            const pos = await client.getPositions(intent.symbol);
-            const ticker = pos.length > 0 ? pos[0].entryPrice : 0;
-            const fallback = ticker > 0 ? ticker : (await (client as any).validateAndReadBalance())?.equityUsd ? 1000 : 0;
-            if (fallback > 0) quantity = (notionalUsd / fallback).toFixed(6);
-          } catch {
-            // last resort: derive from signal price if available
-            if (intent.limitPrice) quantity = (notionalUsd / parseFloat(intent.limitPrice)).toFixed(6);
-          }
-        }
+        return await fanOutAster(intent, intentId);
       } catch (e: any) {
-        return { userId: conn.userId, exchange: conn.exchange, status: "skipped" as const, reason: `balance_failed:${e?.message}` };
+        return [{ userId: 0, provider: "aster" as const, status: "error" as const, reason: e?.message }];
       }
+    })(),
+  ]);
 
-      if (!quantity || parseFloat(quantity) <= 0) {
-        return { userId: conn.userId, exchange: conn.exchange, status: "skipped" as const, reason: "zero_quantity" };
-      }
+  const allResults = [
+    ...cexResults.map((r) => (r.status === "fulfilled" ? r.value : { userId: 0, exchange: "error", status: "error" as const, reason: String(r.reason) })),
+    ...asterResults,
+  ];
 
-      // Fill in the computed sizing fields on the queued job.
-      await db.update(executionJobs).set({
-        notionalUsd: notionalUsd.toFixed(2),
-        quantity,
-        leverage: decision.leverage,
-        limitPrice: intent.limitPrice ?? null,
-        updatedAt: new Date(),
-      } as any).where(eq(executionJobs.id, job.id));
-
-      // Serialize submission per connection, with 3-retry exponential backoff.
-      await enqueue(conn.id, async () => {
-        let attempts = 0;
-        const maxAttempts = 3;
-        const backoff = [1000, 2000, 4000]; // 1s / 2s / 4s
-        let lastError: Error | undefined;
-
-        while (attempts < maxAttempts) {
-          try {
-            attempts++;
-            const adapter = new CexExecutionAdapter(conn.id);
-            const receipt = await adapter.submitOrder(job.id, {
-              symbol: intent.symbol,
-              side: intent.side,
-              type: intent.orderType,
-              quantity,
-              price: intent.limitPrice ?? undefined,
-              leverage: decision.leverage,
-              stopLossPrice: intent.stopLossPrice ?? undefined,
-              takeProfitPrice: intent.takeProfitPrice ?? undefined,
-              clientOrderId: idem,
-            });
-
-            await db.update(executionJobs).set({
-              status: receipt.status === "filled" ? "filled" : "submitted",
-              orderId: receipt.orderId,
-              submittedAt: new Date(),
-              ...(receipt.status === "filled" ? { filledAt: new Date() } : {}),
-              updatedAt: new Date(),
-            } as any).where(eq(executionJobs.id, job.id));
-
-            await db.insert(orderEvents).values({
-              executionJobId: job.id,
-              provider: "cex",
-              eventType: receipt.status,
-              payloadJson: JSON.stringify({ raw: receipt.raw ?? {}, attempt: attempts }),
-            } as any);
-
-            // NAV snapshot on submit/fill
-            try {
-              const creds2 = await decryptCexCredentials(conn);
-              const client2 = createCexClient(conn.exchange, creds2);
-              const bal = await client2.validateAndReadBalance();
-              await db.insert(navSnapshots).values({
-                userId: conn.userId, provider: "cex",
-                accountEquityUsd: bal.equityUsd.toFixed(2),
-                availableBalanceUsd: bal.availableUsd.toFixed(2), source: "provider_sync",
-              } as any);
-            } catch { /* snapshot best-effort */ }
-
-            await writeAuditLog(conn.userId, "EXEC_ORDER_SUBMITTED", `intent:${intentId}; order:${receipt.orderId}; ${conn.exchange}; attempt:${attempts}`);
-            return; // success — break out of retry loop
-          } catch (e: any) {
-            lastError = e;
-            if (attempts < maxAttempts) {
-              const delay = backoff[attempts - 1];
-              console.warn(`[dispatch] attempt ${attempts}/${maxAttempts} failed for job ${job.id}, retrying in ${delay}ms: ${e?.message}`);
-              await new Promise(r => setTimeout(r, delay));
-            }
-          }
-        }
-
-        // All retries exhausted
-        await db.update(executionJobs).set({
-          status: "error", errorMessage: String(lastError?.message).slice(0, 300), updatedAt: new Date(),
-        } as any).where(eq(executionJobs.id, job.id));
-        await db.insert(orderEvents).values({
-          executionJobId: job.id, provider: "cex", eventType: "rejected",
-          payloadJson: JSON.stringify({ error: String(lastError?.message).slice(0, 300), attempts }),
-        } as any);
-        await writeAuditLog(conn.userId, "EXEC_ORDER_FAILED", `intent:${intentId}; ${String(lastError?.message).slice(0, 120)}; attempts:${attempts}`);
-      });
-
-      return { userId: conn.userId, exchange: conn.exchange, jobId: job.id, status: "queued" as const };
-    }),
-  );
-
-  const results = settled.map((r) => {
-    if (r.status === "fulfilled") return r.value;
-    return { userId: 0, exchange: "error", status: "error" as const, reason: String(r.reason) };
-  });
-
-  return { intentId, jobs: results };
+  return { intentId, jobs: allResults };
 }
