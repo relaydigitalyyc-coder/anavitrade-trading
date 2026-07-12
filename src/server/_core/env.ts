@@ -4,7 +4,7 @@ type D1Database = any;
 export type Env = {
   DB: D1Database;
   JWT_SECRET: string;
-  ENCRYPTION_KEY?: string;
+  ENCRYPTION_KEY: string;
   VITE_APP_ID: string;
   BINANCE_API_KEY?: string;
   BINANCE_SECRET_KEY?: string;

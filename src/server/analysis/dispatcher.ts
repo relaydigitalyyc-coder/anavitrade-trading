@@ -82,20 +82,22 @@ export async function dispatchSignal(
     const direction = signal.direction;
     const entry = signal.entry;
 
-    // 1. Compute ATR-based stop loss
+    // 1. Compute stop loss and take profit
+    // Use the signal's own carefully-computed values if present and positive;
+    // fall back to ATR-based formula when the signal does not carry them.
     const stopLoss: number =
-      direction === "long"
-        ? entry * (1 - stopAtrBuffer)
-        : entry * (1 + stopAtrBuffer);
+      signal.stopLoss > 0
+        ? signal.stopLoss
+        : direction === "long"
+          ? entry * (1 - stopAtrBuffer)
+          : entry * (1 + stopAtrBuffer);
 
     const rrMultiplier = 2; // minimum 1:2 risk-reward
     const takeProfit: number =
-      direction === "long"
-        ? signal.takeProfit > 0
-          ? signal.takeProfit
-          : entry * (1 + stopAtrBuffer * rrMultiplier)
-        : signal.takeProfit > 0
-          ? signal.takeProfit
+      signal.takeProfit > 0
+        ? signal.takeProfit
+        : direction === "long"
+          ? entry * (1 + stopAtrBuffer * rrMultiplier)
           : entry * (1 - stopAtrBuffer * rrMultiplier);
 
     // 2. Run SMC validation

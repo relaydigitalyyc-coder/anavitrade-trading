@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { asterAgentAccounts, liveAccounts } from "../../drizzle/schema";
-import { encryptKey, getDb, getOrCreateLiveAccount, writeAuditLog } from "../db";
+import { encryptKey, getDb, getOrCreateLiveAccount, getWeb3WalletSession, writeAuditLog } from "../db";
 import { getAsterConfig } from "./config";
 import { createAsterAgentKeypair } from "./signing";
 import type { AsterAgentPermissions, AsterAgentStatusView } from "./types";
@@ -145,17 +145,28 @@ export async function revokeAsterAgent(userId: number) {
 }
 
 /* ── One-click activation ──
-   Uses the user's already-connected wallet address as the Aster account.
-   Prepares the agent + records approvals in one call — no manual steps. */
+   Uses the user's ALREADY-CONNECTED wallet from web3WalletSessions as the
+   Aster account. The wallet was verified through WalletConnect/Ledger/MetaMask
+   at connection time — no additional signature challenge needed.
+
+   Design rationale: the WalletConnect session already proves the user controls
+   the wallet address. Adding an on-chain signature here would add friction
+   without improving security: the connected wallet *is* the auth. */
+
 export async function activateAsterWithWallet(input: {
   userId: number;
-  walletAddress: string;
 }): Promise<AsterAgentStatusView> {
-  // Step 1: prepare the agent using the wallet address
+  const session = await getWeb3WalletSession(input.userId);
+  if (!session) throw new Error("NO_WALLET_CONNECTED");
+  if (!session.walletAddress) throw new Error("WALLET_ADDRESS_MISSING");
+  if (session.killSwitchActive) throw new Error("WALLET_KILL_SWITCH_ACTIVE");
+
+  const walletAddress = session.walletAddress.toLowerCase().trim();
+
+  // Step 1: prepare the agent using the verified wallet address
   const prepared = await prepareAsterAgent({
     userId: input.userId,
-    asterAccountAddress: input.walletAddress,
-    // Default fee cap — the 2&20 fee stays in Anavitrade's ledger
+    asterAccountAddress: walletAddress,
     maxFeeRate: undefined,
     approvalExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
   });

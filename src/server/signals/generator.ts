@@ -132,12 +132,14 @@ async function dispatchSignal(sig: IndicatorSignal, confluenceCount: number): Pr
 
     const confidence = structuralConfidenceMultiplier(structural.score);
 
-    // ATR-based SL/TP (mirrors coinlegs-scraper.ts dispatch logic)
+    // Unified ATR-based SL/TP (consistent with analysis engine buildSignal):
+    //   stopBuffer = atrEstimate * 1.5  (ATR percentage scaled by 1.5x)
+    //   takeProfit = entry * (1 + stopBuffer * rr) with rr = 2 (fixed 1:2 R:R)
     const atrEst: Record<string, number> = { "4h": 2.0, "2h": 1.5, "1h": 1.2 };
     const stopPct = (atrEst[sig.period] || 1.5) * 1.5;
-    const rMult = sig.period === "4h" ? 5 : sig.period === "2h" ? 4 : 3;
+    const rr = 2;
     const stopPrice = sig.price > 0 ? (sig.price * (1 - stopPct / 100)).toFixed(8) : null;
-    const tpPrice = sig.price > 0 ? (sig.price * (1 + (stopPct * rMult) / 100)).toFixed(8) : null;
+    const tpPrice = sig.price > 0 ? (sig.price * (1 + (stopPct * rr) / 100)).toFixed(8) : null;
 
     await db.insert(tradeIntents).values({
       source: "anavitrade-native",

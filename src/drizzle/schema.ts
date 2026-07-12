@@ -32,6 +32,13 @@ export const liveAccounts = sqliteTable("live_accounts", {
   maxPositionSizePct: text().default("10.00").notNull(),
   maxTotalExposurePct: text().default("25.00").notNull(),
   displayMode: text().default("live").notNull(),
+
+  // Unified funds tracking — aggregated across all linked providers
+  lastTotalEquityUsd: text(),               // cached sum of all linked exchange/wallet equity
+  lastAvailableUsd: text(),                  // cached sum of available balances
+  depositAddress: text(),                    // platform deposit address (for fiat/CEX deposit)
+  linkedExchangesJson: text(),               // cache: JSON array of active exchange IDs
+
   createdAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
   updatedAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
 });

@@ -49,7 +49,7 @@ export default function AsterOnboarding() {
       setShowWalletModal(true);
       return;
     }
-    activate.mutate({ walletAddress });
+    activate.mutate();
   };
 
   // Auto-close wallet modal once connected

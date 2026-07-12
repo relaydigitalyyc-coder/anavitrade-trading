@@ -54,15 +54,17 @@ export const asterRouter = router({
 
   revokeAgent: protectedProcedure.mutation(async ({ ctx }) => revokeAsterAgent(ctx.user.id)),
 
-  /* ── One-click activation ── */
+  /* ── One-click activation ──
+     Uses the user's already-connected web3 wallet (no address input needed).
+     See store.ts for the security rationale. */
   activateWithWallet: protectedProcedure
-    .input(z.object({
-      walletAddress: z.string().min(10).max(100),
-    }))
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ ctx }) => {
       try {
-        return await activateAsterWithWallet({ userId: ctx.user.id, walletAddress: input.walletAddress });
+        return await activateAsterWithWallet({ userId: ctx.user.id });
       } catch (e: any) {
+        if (e?.message === "NO_WALLET_CONNECTED") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No wallet connected. Connect a wallet first." });
+        }
         if (e?.message === "ASTER_BUILDER_ADDRESS_NOT_CONFIGURED") {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Aster builder address is not configured." });
         }

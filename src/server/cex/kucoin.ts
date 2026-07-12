@@ -1,4 +1,4 @@
-import { hmacSha256Hex } from "./signing";
+import { hmacSha256Base64 } from "./signing";
 import type {
   CexBalance, CexClient, CexCredentials, CexOrderRequest, CexOrderResult,
   CexPermissionCheck, CexPosition,
@@ -26,8 +26,8 @@ export class KuCoinFuturesClient implements CexClient {
     const timestamp = String(Date.now());
     const bodyStr = body ? JSON.stringify(body) : "";
     const signStr = timestamp + method + path + bodyStr;
-    const signature = await hmacSha256Hex(this.secret, signStr);
-    const passSig = await hmacSha256Hex(this.secret, this.passphrase);
+    const signature = await hmacSha256Base64(this.secret, signStr);
+    const passSig = await hmacSha256Base64(this.secret, this.passphrase);
 
     const headers: Record<string, string> = {
       "KC-API-KEY": this.key,
@@ -44,7 +44,7 @@ export class KuCoinFuturesClient implements CexClient {
     }
 
     const res = await fetch(`${BASE}${path}`, opts);
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.code !== "200000") throw new Error(`KUCOIN_${json.code}:${json.msg ?? "error"}`);
     return json.data;
   }
@@ -52,7 +52,8 @@ export class KuCoinFuturesClient implements CexClient {
   async validateAndReadBalance(): Promise<CexBalance> {
     const data = await this.signedRequest("GET", "/api/v1/account-overview?currency=USDT");
     const equityUsd = parseFloat(data.equity ?? data.accountEquity ?? 0);
-    const availableUsd = parseFloat(data.availableBalance ?? data.frozenBalance ?? 0) + parseFloat(data.frozenBalance ?? 0);
+    // availableBalance excludes frozen funds — don't add frozenBalance back
+    const availableUsd = parseFloat(data.availableBalance ?? 0);
     return { equityUsd, availableUsd };
   }
 
@@ -78,13 +79,22 @@ export class KuCoinFuturesClient implements CexClient {
       symbol: req.symbol,
       side: req.side === "SELL" ? "sell" : "buy",
       type: req.type === "LIMIT" ? "limit" : "market",
-      size: parseInt(req.quantity, 10),
+      size: Math.round(parseFloat(req.quantity) * 10000) / 10000,
       leverage: String(req.leverage ?? 1),
       marginMode: "cross",
     };
     if (req.type === "LIMIT" && req.price) body.price = req.price;
     if (req.reduceOnly) body.reduceOnly = true;
     if (req.clientOrderId) body.clientOid = req.clientOrderId;
+    // KuCoin Futures: stop loss uses stop="down", take profit uses stop="up" with stopPrice.
+    // Only one stop type per order; stop loss takes priority (risk-first).
+    if (req.stopLossPrice) {
+      body.stop = "down";
+      body.stopPrice = req.stopLossPrice;
+    } else if (req.takeProfitPrice) {
+      body.stop = "up";
+      body.stopPrice = req.takeProfitPrice;
+    }
 
     const data = await this.signedRequest("POST", "/api/v1/orders", body);
     return {

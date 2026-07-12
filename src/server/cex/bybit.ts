@@ -26,7 +26,8 @@ export class BybitFuturesClient implements CexClient {
       .filter(([, v]) => v !== undefined && v !== "")
       .map(([k, v]) => `${k}=${v}`)
       .join("&");
-    const signStr = timestamp + this.key + (query ? `&${query}` : "");
+    // Bybit v5: prehash = timestamp + apiKey + recvWindow + queryString
+    const signStr = timestamp + this.key + RECV_WINDOW + (query ? `${query}` : "");
     const signature = await hmacSha256Hex(this.secret, signStr);
 
     const url = `${BASE}${path}${query ? `?${query}` : ""}`;
@@ -38,9 +39,9 @@ export class BybitFuturesClient implements CexClient {
         "X-BAPI-RECV-WINDOW": String(RECV_WINDOW),
       },
     });
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.retCode !== 0) throw new Error(`BYBIT_${json.retCode}:${json.retMsg ?? "error"}`);
-    return json.result;
+    return json.result ?? json;
   }
 
   private async signedPost(path: string, body: Record<string, unknown> = {}) {
@@ -60,9 +61,9 @@ export class BybitFuturesClient implements CexClient {
       },
       body: bodyStr,
     });
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.retCode !== 0) throw new Error(`BYBIT_${json.retCode}:${json.retMsg ?? "error"}`);
-    return json.result;
+    return json.result ?? json;
   }
 
   async validateAndReadBalance(): Promise<CexBalance> {
@@ -102,6 +103,9 @@ export class BybitFuturesClient implements CexClient {
       timeInForce: req.type === "LIMIT" ? "GTC" : "IOC",
       ...(req.reduceOnly ? { reduceOnly: true } : {}),
       ...(req.clientOrderId ? { orderLinkId: req.clientOrderId } : {}),
+      // Stop-loss and take-profit via Bybit's triggerPrice (v5)
+      ...(req.stopLossPrice ? { triggerPrice: req.stopLossPrice, triggerBy: "LastPrice", slTriggerBy: "LastPrice" } : {}),
+      ...(req.takeProfitPrice ? { takeProfitPrice: req.takeProfitPrice, tpTriggerBy: "LastPrice" } : {}),
     };
     if (req.type === "LIMIT" && req.price) body.price = req.price;
     const data = await this.signedPost("/v5/order/create", body);

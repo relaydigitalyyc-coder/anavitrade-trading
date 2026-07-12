@@ -1,4 +1,7 @@
 /**
+ * WARNING: This version uses forward-only data. Previous version had lookahead
+ * bias (used trade.win/pnlPct).
+ *
  * Zoom Matrix ML — Markov Decision Process training on 1,265-trade corpus.
  *
  * States = (timeframe, regime, recentWR)
@@ -50,8 +53,11 @@ console.log(`MDP Zoom Trainer — ${STATES.length} states × ${ALL_ACTIONS.lengt
 
 function classifyState(trade) {
   const timeframe = trade.period === '4h' ? '4h' : trade.period === '1h' ? '1h' : 'other';
-  const absPnl = Math.abs(trade.pnlPct);
-  const regime = trade.ddPct > 2.5 ? 'volatile' : (absPnl > 2 ? 'trend' : 'range');
+  // Regime determined by indicator type — no outcome data (ddPct/pnlPct removed)
+  const ind = (trade.indicator || '').toLowerCase();
+  const isTrendInd = ind.includes('trend') || ind.includes('ema') || ind.includes('sma') || ind.includes('adx');
+  const isVolatileInd = ind.includes('bb') || ind.includes('bands') || ind.includes('atr');
+  const regime = isVolatileInd ? 'volatile' : (isTrendInd ? 'trend' : 'range');
   return { timeframe, regime };
 }
 
@@ -68,14 +74,22 @@ function wrState(wr) {
 }
 
 function computeReward(trade, action) {
-  const stop = (trade.period === '4h' ? 2.0 : 1.2) * 1.5 / 100;
-  const pos = 0.05 / stop;
-  const lev = trade.period === '4h' || trade.period === '1d' ? 3 : 2;
-  const rawRet = pos * lev * (trade.pnlPct / 100) * 100;
-  const cciBonus = action.cw / 10;
-  const stochBonus = action.sw / 8;
-  const composite = rawRet * (cciBonus + stochBonus) / 2;
-  return composite + Math.sign(trade.pnlPct) * action.mw * 0.1;
+  // Forward-only reward: measures how well the action's weights match the
+  // trade's pre-entry indicator profile and structural tightness. No outcome
+  // data (pnlPct/win/ddPct) is used.
+  const ind = (trade.indicator || '').toLowerCase();
+  const hasCCI = ind.includes('cci');
+  const hasStoch = ind.includes('stoch');
+  const stopDist = trade.entryStopDistance || Math.abs(trade.entry - trade.stopLoss) / (trade.entry || 1);
+
+  // Indicator alignment: high weight on an indicator the trade actually uses
+  let cciScore = hasCCI ? (action.cw / 11) : (1 - action.cw / 11);
+  let stochScore = hasStoch ? (action.sw / 10) : (1 - action.sw / 10);
+  // Structure alignment: tight stops favour higher microW
+  const tightStop = stopDist < 0.02;
+  const microScore = tightStop ? (action.mw / 7) : (1 - action.mw / 7);
+
+  return (cciScore + stochScore + microScore) / 3;
 }
 
 // Q-table — trained ONLY on training data

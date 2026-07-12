@@ -1,4 +1,4 @@
-import { hmacSha256Hex, sha256Hex } from "./signing";
+import { hmacSha256Hex } from "./signing";
 import type {
   CexBalance, CexClient, CexCredentials, CexOrderRequest, CexOrderResult,
   CexPermissionCheck, CexPosition,
@@ -35,12 +35,11 @@ export class KrakenFuturesClient implements CexClient {
 
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${this.key}`,
-        Nonce: nonce,
-        Signature: signature,
+        "API-Key": this.key,
+        Authenticate: nonce + signature,
       },
     });
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.error && json.error !== "0") {
       const msg = Array.isArray(json.error) ? json.error.join("; ") : String(json.error);
       throw new Error(`KRAKEN_${res.status}:${msg}`);
@@ -58,14 +57,13 @@ export class KrakenFuturesClient implements CexClient {
     const res = await fetch(`${BASE}${path}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.key}`,
-        Nonce: nonce,
-        Signature: signature,
+        "API-Key": this.key,
+        Authenticate: nonce + signature,
         "Content-Type": "application/json",
       },
       body: bodyStr,
     });
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.error && json.error !== "0") {
       const msg = Array.isArray(json.error) ? json.error.join("; ") : String(json.error);
       throw new Error(`KRAKEN_${res.status}:${msg}`);
@@ -102,13 +100,14 @@ export class KrakenFuturesClient implements CexClient {
       symbol: pfSymbol,
       side: req.side === "SELL" ? "sell" : "buy",
       type: req.type === "LIMIT" ? "lmt" : "mkt",
-      size: parseInt(req.quantity, 10),
+      size: parseFloat(req.quantity),
     };
     if (req.type === "LIMIT" && req.price) body.limitPrice = req.price;
     if (req.reduceOnly) body.reduceOnly = true;
-    if (req.stopLossPrice) body.stopPrice = req.stopLossPrice;
-    if (req.takeProfitPrice) body.limitPrice = req.takeProfitPrice;
     if (req.clientOrderId) body.cliOrdId = req.clientOrderId;
+    // Kraken Futures: stop-loss and take-profit as separate order fields
+    if (req.stopLossPrice) body.stopPrice = req.stopLossPrice;
+    if (req.takeProfitPrice) body.takeProfitPrice = req.takeProfitPrice;
 
     const data = await this.signedPost("/api/v3/sendorder", body);
     return {

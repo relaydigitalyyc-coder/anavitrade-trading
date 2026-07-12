@@ -30,7 +30,11 @@ WalletConnect/Reown project ID is configured in `.env`:
 VITE_WALLETCONNECT_PROJECT_ID=05dcea0e853d0ee47e980c540ec55494
 ```
 
-If this value changes, restart Vite because `import.meta.env` is read at startup.
+The encryption key for API credentials at rest uses `ENCRYPTION_KEY`. In local dev,
+set it in `wrangler.toml [vars]` or `.env`. For production, set it as a Worker
+secret. It must NOT match `JWT_SECRET`.
+
+If any env var value changes, restart Vite because `import.meta.env` is read at startup.
 
 ## Architecture Notes
 
@@ -67,9 +71,10 @@ The smoke test verifies the dashboard wallet button, the WalletConnect/Reown pop
   impractical from the Worker itself. Before live funds, route order signing/submission through a
   dedicated execution service with a static egress address.
 - **Encryption key**: `ENCRYPTION_KEY` is the Worker secret used as the AES-256 key for
-  `encryptKey`/`decryptKey` (falls back to `JWT_SECRET` in dev). In production, set it via
-  `npx wrangler secret put ENCRYPTION_KEY` — the JWT session secret and the data-at-rest key
-  must NOT be the same value.
+  `encryptKey`/`decryptKey`. In production, set it via
+  `npx wrangler secret put ENCRYPTION_KEY`. For local dev, set it in `wrangler.toml [vars]`.
+  The JWT session secret and the data-at-rest key must NOT be the same value —
+  the code now throws if `ENCRYPTION_KEY` is missing.
 - **Per-connection kill switch**: Set via `cex.toggleKillSwitch` or manually in D1
   (`cex_connections.killSwitchActive`). The risk engine (`decideExecution()`) denies any job
   when active. Global kill: `exec.setGlobalKill`.

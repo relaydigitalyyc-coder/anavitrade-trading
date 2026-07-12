@@ -14,9 +14,9 @@
  */
 
 import { getDb } from "../db";
-import { analysisRuns, analysisSignals } from "../../drizzle/schema";
-import { and, eq, gte } from "drizzle-orm";
-import type { UnifiedSignal, EnrichedCandle, IcrConfig } from "./types";
+import { analysisRuns, analysisSignals, derivativesSnapshots } from "../../drizzle/schema";
+import { and, eq, gte, desc } from "drizzle-orm";
+import type { UnifiedSignal, EnrichedCandle, IcrConfig, DerivativesSnapshot } from "./types";
 import {
   DEFAULT_ICR_CONFIG,
   DEFAULT_COIL_CONFIG,
@@ -260,11 +260,56 @@ export async function runAnalysisEngine(
     const derivFetcher = new DerivativesFetcher();
     const derivSnapshots = await derivFetcher.snapshotAll();
 
-    // 5. Compute alpha scores for each symbol with a snapshot
+    // 5. Compute alpha scores for each symbol with a previous snapshot
+    //    so OI change velocity (demand velocity + leverage penalty) is
+    //    based on real data, not always zero.
     const alphaMap = new Map<string, { score: number; bias: string }>();
     for (const snap of derivSnapshots) {
-      const alpha = computeAlpha(snap, null);
+      // Fetch the previous derivatives snapshot for the same symbol from the DB
+      let previous: DerivativesSnapshot | null = null;
+      try {
+        const rows = await db
+          .select()
+          .from(derivativesSnapshots)
+          .where(eq(derivativesSnapshots.symbol, snap.symbol))
+          .orderBy(desc(derivativesSnapshots.snapshotAt))
+          .limit(1);
+        if (rows.length > 0) {
+          const row = rows[0];
+          previous = {
+            symbol: row.symbol,
+            timestamp: row.snapshotAt,
+            openInterest: parseFloat(row.openInterest),
+            oiChange24h: row.oiChange24hPct ? parseFloat(row.oiChange24hPct) : 0,
+            fundingRate: row.fundingRate ? parseFloat(row.fundingRate) : 0,
+            longShortRatio: row.longShortRatio ? parseFloat(row.longShortRatio) : 1.0,
+            longPct: row.longPct ? parseFloat(row.longPct) : 50,
+            shortPct: row.shortPct ? parseFloat(row.shortPct) : 50,
+          };
+        }
+      } catch (e: any) {
+        console.warn(`[analysis-engine] failed to fetch previous snapshot for ${snap.symbol}:`, e?.message);
+      }
+
+      const alpha = computeAlpha(snap, previous);
       alphaMap.set(snap.symbol, { score: alpha.score, bias: alpha.bias });
+
+      // Save the current snapshot to the DB so the next cycle can use it
+      // to compute real OI change.
+      try {
+        await db.insert(derivativesSnapshots).values({
+          symbol: snap.symbol,
+          openInterest: String(snap.openInterest),
+          oiChange24hPct: String(snap.oiChange24h),
+          fundingRate: String(snap.fundingRate),
+          longShortRatio: String(snap.longShortRatio),
+          longPct: String(snap.longPct),
+          shortPct: String(snap.shortPct),
+          snapshotAt: snap.timestamp,
+        } as any);
+      } catch (e: any) {
+        console.warn(`[analysis-engine] failed to persist snapshot for ${snap.symbol}:`, e?.message);
+      }
     }
 
     // 6. Merge derivatives alpha into signals

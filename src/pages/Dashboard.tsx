@@ -102,7 +102,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (showActivationPanel && web3Connected && !activate.isPending && !asterConnected) {
       if (web3Session?.walletAddress) {
-        activate.mutate({ walletAddress: web3Session.walletAddress });
+        activate.mutate();
       }
     }
   }, [web3Connected, showActivationPanel, web3Session?.walletAddress, asterConnected, activate]);
@@ -173,7 +173,7 @@ export default function Dashboard() {
           onConnectWallet={() => setShowWalletModal(true)}
           onActivate={() => {
             if (web3Session?.walletAddress) {
-              activate.mutate({ walletAddress: web3Session.walletAddress });
+              activate.mutate();
             }
           }}
           onShowWizard={() => setShowWizard(true)}

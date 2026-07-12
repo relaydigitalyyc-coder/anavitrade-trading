@@ -1,4 +1,4 @@
-import { hmacSha256Hex } from "./signing";
+import { hmacSha256Base64 } from "./signing";
 import type {
   CexBalance, CexClient, CexCredentials, CexOrderRequest, CexOrderResult,
   CexPermissionCheck, CexPosition,
@@ -26,7 +26,7 @@ export class OkxFuturesClient implements CexClient {
     const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const bodyStr = body ? JSON.stringify(body) : "";
     const signStr = timestamp + method + path + bodyStr;
-    const signature = await hmacSha256Hex(this.secret, signStr);
+    const signature = await hmacSha256Base64(this.secret, signStr);
 
     const headers: Record<string, string> = {
       "OK-ACCESS-KEY": this.key,
@@ -42,7 +42,7 @@ export class OkxFuturesClient implements CexClient {
     }
 
     const res = await fetch(`${BASE}${path}`, opts);
-    const json = await res.json();
+    const json: any = await res.json();
     if (json.code !== "0") throw new Error(`OKX_${json.code}:${json.msg ?? "error"}`);
     return json.data;
   }
@@ -87,12 +87,16 @@ export class OkxFuturesClient implements CexClient {
     if (req.type === "LIMIT" && req.price) body.px = req.price;
     if (req.reduceOnly) body.reduceOnly = "true";
     if (req.clientOrderId) body.clOrdId = req.clientOrderId;
+    // Stop-loss and take-profit as separate orders via OKX algo ordering
+    if (req.stopLossPrice) body.slTriggerPx = req.stopLossPrice;
+    if (req.takeProfitPrice) body.tpTriggerPx = req.takeProfitPrice;
 
     const data = await this.request("POST", "/api/v5/trade/order", body);
     const order = Array.isArray(data) ? data[0] : data;
+    const rejected = order.sCode && order.sCode !== "0";
     return {
       orderId: String(order.ordId ?? ""),
-      status: order.state === "filled" ? "filled" : order.sCode === "0" ? "accepted" : "accepted",
+      status: rejected ? "rejected" : order.state === "filled" ? "filled" : "accepted",
       raw: data,
     };
   }

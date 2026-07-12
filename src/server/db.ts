@@ -28,42 +28,51 @@ export function getDb() {
 }
 
 /* ─── Encryption key ───
-   Derive the AES key from ENCRYPTION_KEY (Cloudflare Secret in production)
-   or fall back to JWT_SECRET for local dev. The fallback path reuses the
-   JWT secret so existing encrypted data remains readable in dev when
-   no separate key is configured. */
+   Derive the AES key from ENCRYPTION_KEY (Cloudflare Secret in production).
+   ENCRYPTION_KEY MUST be set separately from JWT_SECRET — reusing the JWT
+   secret for both JWT signing and API-key encryption is a security risk.
+   In local dev, set ENCRYPTION_KEY in wrangler.toml [vars] or in .env. */
 function deriveEncryptionSecret(): string {
-  const key = _env?.ENCRYPTION_KEY ?? _env?.JWT_SECRET ?? "";
-  return key.slice(0, 32).padEnd(32, "0");
+  const encryptionKey = _env?.ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error(
+      "ENCRYPTION_KEY is not set. " +
+      "Set a separate 32+ character key in wrangler.toml [vars] for local dev, " +
+      "or via `npx wrangler secret put ENCRYPTION_KEY` for production. " +
+      "Do NOT reuse JWT_SECRET as the encryption key."
+    );
+  }
+  return encryptionKey.slice(0, 32).padEnd(32, "0");
 }
 
 async function getEncryptionKey(secret: string): Promise<CryptoKey> {
   const keyBytes = new TextEncoder().encode(secret.padEnd(32).slice(0, 32));
-  return crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC", length: 256 }, false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 
 export async function encryptKey(plaintext: string): Promise<string> {
   const secret = deriveEncryptionSecret();
-  const iv = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // GCM standard 96-bit IV
   const key = await getEncryptionKey(secret);
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-CBC", iv },
+    { name: "AES-GCM", iv },
     key,
     new TextEncoder().encode(plaintext)
   );
-  const combined = new Uint8Array(16 + new Uint8Array(encrypted).length);
+  // GCM appends a 16-byte auth tag to the ciphertext
+  const combined = new Uint8Array(12 + new Uint8Array(encrypted).length);
   combined.set(iv, 0);
-  combined.set(new Uint8Array(encrypted), 16);
+  combined.set(new Uint8Array(encrypted), 12);
   return btoa(String.fromCharCode(...combined));
 }
 
 export async function decryptKey(ciphertext: string): Promise<string> {
   const secret = deriveEncryptionSecret();
   const raw = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
-  const iv = raw.slice(0, 16);
-  const encrypted = raw.slice(16);
+  const iv = raw.slice(0, 12);
+  const encrypted = raw.slice(12); // ciphertext includes the GCM auth tag
   const key = await getEncryptionKey(secret);
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, key, encrypted);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
   return new TextDecoder().decode(decrypted);
 }
 

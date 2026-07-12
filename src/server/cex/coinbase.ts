@@ -1,4 +1,4 @@
-import { hmacSha256Hex } from "./signing";
+import { hmacSha256Base64 } from "./signing";
 import type {
   CexBalance, CexClient, CexCredentials, CexOrderRequest, CexOrderResult,
   CexPermissionCheck, CexPosition,
@@ -27,7 +27,7 @@ export class CoinbaseFuturesClient implements CexClient {
     const timestamp = String(Math.floor(Date.now() / 1000));
     const bodyStr = body ? JSON.stringify(body) : "";
     const signStr = timestamp + method + path + bodyStr;
-    const signature = await hmacSha256Hex(this.secret, signStr);
+    const signature = await hmacSha256Base64(this.secret, signStr);
 
     const headers: Record<string, string> = {
       "CB-ACCESS-KEY": this.key,
@@ -89,12 +89,15 @@ export class CoinbaseFuturesClient implements CexClient {
       };
     } else {
       body.order_configuration = {
+        // Coinbase Advanced Trade: market orders use base_size for the asset qty
         market_market_ioc: {
-          quote_size: req.quantity,
+          base_size: req.quantity,
         },
       };
     }
     if (req.clientOrderId) body.client_order_id = req.clientOrderId;
+    // Coinbase Advanced Trade doesn't support embedded SL/TP on market orders.
+    // Stop orders must be placed as separate stop-limit orders after fill in a future pass.
 
     const data = await this.request("POST", "/orders", body);
     return {
