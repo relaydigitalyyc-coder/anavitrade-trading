@@ -53,6 +53,10 @@ If any env var value changes, restart Vite because `import.meta.env` is read at 
   `https://coinlegs-worker.erhazeariel.workers.dev/latest`
 - TradingView mini widgets live in `src/components/TradingViewMiniWidgets.tsx`.
 
+## Agent Handoff Notes
+
+- UI upgrade production caveats are tracked in `docs/ops/2026-07-13-ui-prod-caveats-audit.md`. Read it before deployment, UI/UX continuation, API routing/CORS changes, Vercel work, Cloudflare Worker release work, or authenticated dashboard QA.
+
 ## Verification Status
 
 Last verified on 2026-07-07:

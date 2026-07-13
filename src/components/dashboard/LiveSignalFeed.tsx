@@ -73,29 +73,27 @@ function RankMark({ rank, winner }: { rank: number; winner: boolean }) {
   if (rank > 0) {
     return (
       <span
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border text-[11px] font-bold tabular ${rank === 1 ? "trophy-pulse" : ""}`}
+        className={`inline-flex h-7 min-w-10 items-center justify-center gap-1 rounded-lg border px-1.5 text-[11px] font-bold tabular ${rank === 1 ? "trophy-pulse" : ""}`}
         style={{
           color: "oklch(0.82 0.16 85)",
           background: "oklch(0.82 0.16 85 / 0.10)",
           borderColor: "oklch(0.82 0.16 85 / 0.28)",
         }}
-        aria-label={`Winner rank ${rank}`}
       >
-        <Medal className="h-3.5 w-3.5" />
+        <Medal className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>#{rank}</span>
       </span>
     );
   }
 
   return winner ? (
-    <span
-      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-gold-30 bg-gold-10 text-gold"
-      aria-label="Highlighted signal"
-    >
-      <Flame className="h-3.5 w-3.5" />
+    <span className="inline-flex h-7 min-w-10 items-center justify-center gap-1 rounded-lg border border-gold-30 bg-gold-10 px-1.5 text-[11px] font-bold text-gold">
+      <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>Hot</span>
     </span>
   ) : (
     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/30 bg-muted/20 text-muted-foreground/50">
-      <Activity className="h-3.5 w-3.5" />
+      <Activity className="h-3.5 w-3.5" aria-hidden="true" />
     </span>
   );
 }
@@ -302,7 +300,7 @@ export default function LiveSignalFeed({
                   type="button"
                   onClick={() => { onSetTierFilter(t); onSetSignalPage(0); }}
                   aria-pressed={tierFilter === t}
-                  className={`min-h-9 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
+                  className={`min-h-11 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
                     tierFilter === t
                       ? t === "A" ? "bg-gold text-black font-bold shadow-sm"
                         : t === "B" ? "bg-primary/20 text-primary shadow-sm"
@@ -323,7 +321,7 @@ export default function LiveSignalFeed({
                   type="button"
                   onClick={() => { onSetSignalPeriod(period); onSetSignalPage(0); }}
                   aria-pressed={signalPeriod === period}
-                  className={`min-h-9 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
+                  className={`min-h-11 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
                     signalPeriod === period ? "bg-muted text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -436,7 +434,7 @@ export default function LiveSignalFeed({
               onClick={() => onSetSignalPage(Math.max(0, signalPage - 1))}
               disabled={signalPage === 0}
               aria-label="Previous signal page"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -446,7 +444,7 @@ export default function LiveSignalFeed({
               onClick={() => onSetSignalPage(Math.min(signalsMaxPage, signalPage + 1))}
               disabled={signalPage >= signalsMaxPage}
               aria-label="Next signal page"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

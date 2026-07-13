@@ -29,3 +29,17 @@
 6. Trigger `POST /api/signals/generate` to confirm native generator works
 7. Wait for cron to run analysis (5 fires) + outcome (15 fires) + fee (1440 fires)
 8. Upgrade wrangler: `npm install --save-dev wrangler@4`
+
+## Session: 2026-07-13 (UI Upgrade Production Caveats Audit)
+
+### Done This Session
+- [x] Audited UI upgrade production caveats against `src/config.ts`, `src/main.tsx`, `src/server/worker.ts`, `src/components/dashboard/MarketTickerRail.tsx`, and `src/components/TradingViewMiniWidgets.tsx`.
+- [x] Added canonical agent-readable audit note: `docs/ops/2026-07-13-ui-prod-caveats-audit.md`.
+- [x] Added root handoff pointer in `CLAUDE.md` and persistent summary in `findings.md`.
+
+### Follow-Up
+1. Move production API routing to an explicit `VITE_API_BASE_URL` or equivalent environment contract.
+2. Centralize Worker CORS allowed origins and add a trusted preview/custom-domain strategy.
+3. Add authenticated dashboard QA with production-like session/data fixtures.
+4. Wire `MarketTickerRail` to live market/signal data or scope fallback content as non-authoritative highlights.
+5. Add TradingView fallback/timeout UI and continue bundle chunk audits for wallet/chart/provider dependencies.

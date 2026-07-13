@@ -181,7 +181,7 @@ function DashboardLayoutContent({
             <div className="flex items-center gap-3 px-3 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Toggle navigation"
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
@@ -209,7 +209,7 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={`min-h-11 transition-all font-normal`}
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
@@ -225,7 +225,7 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <button className="flex min-h-11 w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors hover:bg-accent/50 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Avatar className="h-9 w-9 border shrink-0">
                     <AvatarFallback className="text-xs font-medium">
                       {user?.name?.charAt(0).toUpperCase()}
@@ -254,7 +254,7 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
+          className={`absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none transition-colors hover:bg-primary/20 ${isCollapsed || isMobile ? "hidden" : ""}`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);
@@ -266,9 +266,9 @@ function DashboardLayoutContent({
       <SidebarInset>
         {/* Mobile header */}
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="sticky top-0 z-40 flex min-h-14 items-center justify-between gap-2 border-b bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
+              <SidebarTrigger className="h-11 w-11 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
                 <span className="tracking-tight text-foreground text-sm font-medium">
                   {activeMenuItem?.label ?? "Menu"}
@@ -276,7 +276,7 @@ function DashboardLayoutContent({
               </div>
             </div>
             {headerActions && (
-              <div className="flex items-center gap-2 pr-2">
+              <div className="flex min-w-0 items-center gap-2 overflow-x-auto pr-2">
                 {headerActions}
               </div>
             )}
@@ -290,7 +290,7 @@ function DashboardLayoutContent({
           >
             <div className="flex items-center justify-between px-6 py-3.5">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent" />
+                <SidebarTrigger className="h-10 w-10 rounded-lg hover:bg-accent" />
                 <div className="w-px h-5 bg-border/50" />
                 <h2 className="text-sm font-semibold text-foreground tracking-tight">
                   {activeMenuItem?.label ?? "Dashboard"}
@@ -303,9 +303,11 @@ function DashboardLayoutContent({
           </div>
         )}
 
-        <main className={cn(
-          "flex-1",
-          variant === "default" ? "p-6" : "p-0"
+        <main id="main-content"
+          tabIndex={-1}
+          className={cn(
+          "flex-1 outline-none",
+          variant === "default" ? "p-4 sm:p-6" : "p-0"
         )}>
           {children}
         </main>

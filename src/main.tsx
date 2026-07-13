@@ -9,6 +9,7 @@ import superjson from "superjson";
 import { COOKIE_NAME, UNAUTHED_ERR_MSG } from "@shared/const";
 import { TRPCClientError } from "@trpc/client";
 import { getLoginUrl } from "@/const";
+import { getApiBaseUrl } from "@/config";
 import App from "./App";
 import "./index.css";
 
@@ -70,7 +71,7 @@ queryClient.getMutationCache().subscribe((event) => {
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/trpc",
+      url: `${getApiBaseUrl()}/api/trpc`,
       transformer: superjson as any,
       headers() {
         try {

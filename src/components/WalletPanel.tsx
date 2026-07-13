@@ -117,7 +117,7 @@ export default function WalletPanel({
               </div>
             </div>
             {isConnected && (
-              <button onClick={() => setShowDetails(!showDetails)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+              <button onClick={() => setShowDetails(!showDetails)} className="min-h-10 min-w-10 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60" aria-label={showDetails ? "Hide wallet details" : "Show wallet details"}>
                 {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             )}
@@ -161,11 +161,11 @@ export default function WalletPanel({
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={handleCopyAddress}
-                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors bg-muted/30">
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted/30 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60" aria-label={copied ? "Wallet address copied" : "Copy wallet address"}>
                   {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
                 <a href={`https://etherscan.io/address/${walletAddress}`} target="_blank" rel="noopener noreferrer"
-                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors bg-muted/30">
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted/30 text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60" aria-label="Open wallet address on Etherscan">
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
@@ -180,7 +180,7 @@ export default function WalletPanel({
                 <div>
                   <p className="text-foreground text-sm font-medium">Copytrade</p>
                   <p className="text-muted-foreground text-xs">
-                    {killActive ? "Paused by kill switch" : copytradeEnabled ? "Receiving signals" : "Awaiting algo wire-in"}
+                    {killActive ? "Paused by kill switch" : copytradeEnabled ? "Receiving signals" : "Ready for signal routing"}
                   </p>
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function WalletPanel({
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleKillSwitch}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`min-h-10 px-4 py-1.5 rounded-lg text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
                     killActive
                       ? "bg-amber-400 text-background"
                       : "text-amber-400 border border-amber-400/30"
@@ -257,7 +257,7 @@ export default function WalletPanel({
                   </div>
 
                   <button onClick={handleRevoke}
-                    className={`w-full py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 border ${
+                    className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
                       revokeConfirm
                         ? "bg-red-500/20 border-red-500/40 text-red-400"
                         : "bg-transparent border-red-500/20 text-red-400 hover:bg-red-500/5"

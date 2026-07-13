@@ -1,95 +1,124 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import DemoSignup from "./pages/DemoSignup";
-import DemoDashboard from "./pages/DemoDashboard";
-import PublicDemo from "./pages/PublicDemo";
-import Register from "./pages/Register";
-import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import VerifyEmail from "./pages/VerifyEmail";
-import AsterOnboarding from "./pages/AsterOnboarding";
-import LedgerOnboarding from "./pages/LedgerOnboarding";
-import ExchangeOnboarding from "./pages/ExchangeOnboarding";
-import AccountSettings from "./pages/AccountSettings";
-import Dashboard from "./pages/Dashboard";
-import HistoricalPerformance from "./pages/HistoricalPerformance";
-import Security from "./pages/Security";
-import LegalPage from "./pages/LegalPage";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { lazy, Suspense, useEffect } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const NotFound = lazy(() => import("@/pages/NotFound"));
+const Home = lazy(() => import("@/pages/Home"));
+const DemoSignup = lazy(() => import("@/pages/DemoSignup"));
+const DemoDashboard = lazy(() => import("@/pages/DemoDashboard"));
+const PublicDemo = lazy(() => import("@/pages/PublicDemo"));
+const Register = lazy(() => import("@/pages/Register"));
+const Login = lazy(() => import("@/pages/Login"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
+const AsterOnboarding = lazy(() => import("@/pages/AsterOnboarding"));
+const LedgerOnboarding = lazy(() => import("@/pages/LedgerOnboarding"));
+const ExchangeOnboarding = lazy(() => import("@/pages/ExchangeOnboarding"));
+const AccountSettings = lazy(() => import("@/pages/AccountSettings"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const HistoricalPerformance = lazy(() => import("@/pages/HistoricalPerformance"));
+const Security = lazy(() => import("@/pages/Security"));
+const LegalPage = lazy(() => import("@/pages/LegalPage"));
+
+function PageFallback() {
+  return (
+    <div className="min-h-dvh bg-background p-4 sm:p-6" role="status" aria-live="polite" aria-label="Loading page">
+      <div className="mx-auto flex max-w-7xl gap-6">
+        <Skeleton className="hidden h-[calc(100dvh-3rem)] w-64 rounded-2xl lg:block" />
+        <div className="flex-1 space-y-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-48 rounded-lg" />
+              <Skeleton className="h-4 w-64 max-w-[70vw]" />
+            </div>
+            <Skeleton className="h-10 w-28 rounded-full" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-28 rounded-2xl" />
+            ))}
+          </div>
+          <Skeleton className="h-80 rounded-2xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <PageFallback />;
   if (!isAuthenticated) return <Redirect to="/login" />;
   return <Component />;
 }
 
 function AnimatedRoutes() {
   const [location] = useLocation();
+  const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>("main, [data-route-focus]")?.focus({ preventScroll: true });
+  }, [location]);
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
         key={location}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+        data-route-focus
+        tabIndex={-1}
+        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+        transition={{ duration: prefersReducedMotion ? 0.01 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+        className="outline-none"
       >
-        <Switch location={location}>
-          {/* Public */}
-          <Route path="/" component={Home} />
-          <Route path="/register" component={Register} />
-          <Route path="/login" component={Login} />
-          <Route path="/forgot-password" component={ForgotPassword} />
-          <Route path="/reset-password" component={ResetPassword} />
-          <Route path="/verify-email" component={VerifyEmail} />
+        <Suspense fallback={<PageFallback />}>
+          <Switch location={location}>
+            <Route path="/" component={Home} />
+            <Route path="/register" component={Register} />
+            <Route path="/login" component={Login} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
+            <Route path="/verify-email" component={VerifyEmail} />
 
-          {/* Demo (no auth required) */}
-          <Route path="/demo" component={PublicDemo} />
-          <Route path="/demo/signup" component={DemoSignup} />
-          <Route path="/demo/dashboard/:token" component={DemoDashboard} />
+            <Route path="/demo" component={PublicDemo} />
+            <Route path="/demo/signup" component={DemoSignup} />
+            <Route path="/demo/dashboard/:token" component={DemoDashboard} />
 
-          {/* Protected */}
-          <Route path="/dashboard">
-            {() => <ProtectedRoute component={Dashboard} />}
-          </Route>
-          <Route path="/performance">
-            {() => <ProtectedRoute component={HistoricalPerformance} />}
-          </Route>
-          <Route path="/onboarding/aster">
-            {() => <ProtectedRoute component={AsterOnboarding} />}
-          </Route>
-          <Route path="/onboarding/ledger">
-            {() => <ProtectedRoute component={LedgerOnboarding} />}
-          </Route>
-          <Route path="/onboarding/exchange">
-            {() => <ProtectedRoute component={ExchangeOnboarding} />}
-          </Route>
-          <Route path="/settings">
-            {() => <ProtectedRoute component={AccountSettings} />}
-          </Route>
+            <Route path="/dashboard">
+              {() => <ProtectedRoute component={Dashboard} />}
+            </Route>
+            <Route path="/performance">
+              {() => <ProtectedRoute component={HistoricalPerformance} />}
+            </Route>
+            <Route path="/onboarding/aster">
+              {() => <ProtectedRoute component={AsterOnboarding} />}
+            </Route>
+            <Route path="/onboarding/ledger">
+              {() => <ProtectedRoute component={LedgerOnboarding} />}
+            </Route>
+            <Route path="/onboarding/exchange">
+              {() => <ProtectedRoute component={ExchangeOnboarding} />}
+            </Route>
+            <Route path="/settings">
+              {() => <ProtectedRoute component={AccountSettings} />}
+            </Route>
 
-          {/* Public info pages */}
-          <Route path="/security" component={Security} />
-          <Route path="/terms">{() => <LegalPage type="terms" />}</Route>
-          <Route path="/privacy">{() => <LegalPage type="privacy" />}</Route>
+            <Route path="/security" component={Security} />
+            <Route path="/terms">{() => <LegalPage type="terms" />}</Route>
+            <Route path="/privacy">{() => <LegalPage type="privacy" />}</Route>
 
-          {/* Fallback */}
-          <Route path="/404" component={NotFound} />
-          <Route component={NotFound} />
-        </Switch>
+            <Route path="/404" component={NotFound} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </motion.div>
     </AnimatePresence>
   );

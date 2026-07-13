@@ -24,7 +24,7 @@ const app = new Hono<{ Bindings: Env }>();
 let _adminKeyWarned = false;
 
 app.use("/api/*", cors({
-  origin: ["http://localhost:5174", "http://127.0.0.1:5174"],
+  origin: ["http://localhost:5174", "http://127.0.0.1:5174", "https://anavitrade-trading.vercel.app"],
   credentials: true,
 }));
 

@@ -1,7 +1,7 @@
 {
-  "pid": 239741,
-  "port": 43971,
-  "token": "358b1038-8bbc-4afc-b071-cebea02d843f",
-  "startedAt": "2026-07-12T17:09:20.841Z",
+  "pid": 1255623,
+  "port": 33461,
+  "token": "f6d4a0b7-0d69-4eeb-8ccc-286edceab8bb",
+  "startedAt": "2026-07-13T18:58:08.492Z",
   "serverPath": "/home/ariel/.claude/skills/gstack/browse/src/server.ts"
 }

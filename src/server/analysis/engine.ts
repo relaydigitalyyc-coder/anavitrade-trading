@@ -185,10 +185,12 @@ export async function runAnalysisEngine(
   const db = getDb();
 
   try {
-    const watchlist = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","UNIUSDT","SHIBUSDT","LTCUSDT","ATOMUSDT","ETCUSDT","XLMUSDT","BCHUSDT","ALGOUSDT","TRXUSDT","NEARUSDT","FILUSDT","APTUSDT"];
+    const watchlist = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","LINKUSDT","MATICUSDT","UNIUSDT","SHIBUSDT","LTCUSDT","ATOMUSDT"];
 
     // 1. Fetch latest klines for all symbols
-    const klineUpdates = 0; // DB-only, no live Binance fetch
+    const klineUpdates = 0;
+    const fetcher = new KlineFetcher(15);
+    try { const updates = await fetcher.updateTimeframe(timeframe); console.log("[analysis-engine] kline fetch:", updates, "new candles"); } catch (e: any) { console.warn("[analysis-engine] kline fetch error:", e.message); }
     console.log(
       `[analysis-engine] kline updates: ${klineUpdates} new candles across ${watchlist.length} symbols`,
     );

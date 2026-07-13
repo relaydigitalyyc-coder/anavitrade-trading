@@ -21,6 +21,7 @@ import DemoTradeHistory from "@/components/dashboard/DemoTradeHistory";
 import LiveSignalFeed from "@/components/dashboard/LiveSignalFeed";
 import FirstRunWizard from "@/components/dashboard/FirstRunWizard";
 import AsterExecutionPanel from "@/components/dashboard/AsterExecutionPanel";
+import MarketTickerRail from "@/components/dashboard/MarketTickerRail";
 
 // Shared components
 import WalletPanel from "@/components/WalletPanel";
@@ -117,8 +118,6 @@ export default function Dashboard() {
   const totalPnl = 0;
   const pnlPct = "0.00";
 
-  const rankMedals = ["🥇", "🥈", "🥉"];
-
   return (
     <DashboardLayout
       headerActions={
@@ -126,27 +125,33 @@ export default function Dashboard() {
           {/* Mode Toggle */}
           <div className="flex items-center gap-0.5 p-0.5 rounded-lg border border-primary/15 bg-background/50">
             <button
+              type="button"
+              aria-pressed={currentMode === "live"}
               onClick={() => { if (currentMode !== "live") setDisplayMode.mutate({ mode: "live" }); }}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${currentMode === "live" ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`min-h-11 px-3 py-1 text-xs font-medium rounded-md transition-all ${currentMode === "live" ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               Live
             </button>
             <button
+              type="button"
+              aria-pressed={isDemoMode}
               onClick={() => { if (currentMode !== "demo") setDisplayMode.mutate({ mode: "demo" }); }}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${isDemoMode ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`min-h-11 px-3 py-1 text-xs font-medium rounded-md transition-all ${isDemoMode ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               Demo
             </button>
           </div>
-          <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${statusColor}`}>
+          <div className={`hidden min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:flex ${statusColor}`}>
             <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
             {statusLabel}
           </div>
           {anyConnected && (
             <button
+              type="button"
               onClick={handleKillSwitch}
+              aria-label={killActive ? "Resume trading" : "Activate kill switch"}
               disabled={false}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 ${
+              className={`flex min-h-11 items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 ${
                 killActive
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
@@ -187,6 +192,8 @@ export default function Dashboard() {
           onActivate={() => activate.mutate()}
           onShowWizard={() => setShowWizard(true)}
         />
+
+        <MarketTickerRail topSignals={topWinners} />
 
         <TradingViewMiniWidgets />
 
@@ -303,9 +310,10 @@ export default function Dashboard() {
         <motion.button
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border transition-all hover:scale-105"
+          className="fixed bottom-4 right-4 z-40 flex min-h-11 items-center gap-2 rounded-xl border px-4 py-3 shadow-lg transition-all hover:scale-105 sm:bottom-6 sm:right-6"
           style={{ background: "linear-gradient(145deg, oklch(0.12 0.022 250 / 0.95), oklch(0.09 0.018 255 / 0.98))", borderColor: "oklch(0.60 0.22 220 / 0.25)" }}
           onClick={() => setShowWizard(true)}
+          aria-label="Open quick start wizard"
         >
           <Sparkles className="w-4 h-4 text-primary" />
           <span className="text-xs font-semibold text-foreground">Quick Start</span>

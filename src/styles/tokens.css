@@ -147,6 +147,18 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
   }
+
+  /* Tailwind v4 container only sets width + max-width — add centering + gutters */
+  .container {
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 768px) {
+    .container { padding-inline: 1.5rem; }
+  }
+  @media (min-width: 1280px) {
+    .container { padding-inline: 2rem; }
+  }
 }
 
 /* Custom dark scrollbar */

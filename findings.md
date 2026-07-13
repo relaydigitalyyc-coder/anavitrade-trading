@@ -24,3 +24,14 @@ Disabled in scraper — `analysis_signals` table still uses `timestamp_ms` colum
 - **Alerting:** No webhook/slack for cron failure notification.
 - **Wrangler version:** v3.114 (v4 available: `npm i --save-dev wrangler@4`)
 - **Secrets:** `ENCRYPTION_KEY` and `JWT_SECRET` both dev values locally. Must be different in prod.
+
+## 2026-07-13 UI Upgrade Production Caveats Audit
+
+Canonical note for agents: `docs/ops/2026-07-13-ui-prod-caveats-audit.md`.
+
+Key findings:
+- Production frontend API routing is hard-coded through `src/config.ts` to the Cloudflare Worker origin; use env-based routing before relying on previews, staging, or custom domains.
+- Worker CORS currently allows localhost and the main Vercel app origin only; preview/custom origins need deliberate handling for credentialed tRPC calls.
+- Authenticated dashboard QA remains a gap even though `npx tsc --noEmit`, `npx vite build`, `pnpm run check`, and public/login responsive smoke checks passed.
+- `MarketTickerRail` still includes curated fallback market items and must not be described as exchange-authoritative real-time price data until wired to a live source.
+- Root providers and third-party embeds remain production performance/resilience risks: Wagmi/wallet/chart/motion chunks need continued bundle audits, and TradingView iframes need graceful runtime fallbacks.
