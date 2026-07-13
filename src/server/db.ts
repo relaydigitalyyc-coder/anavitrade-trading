@@ -25,6 +25,7 @@ export function getRawD1(): any {
 
 export function setDbEnv(env: Env) {
   _env = env;
+  (globalThis as any).__env = env;
   _db = drizzle(env.DB);
 }
 

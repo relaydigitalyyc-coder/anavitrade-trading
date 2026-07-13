@@ -2,7 +2,6 @@ import type { Kline } from "./types";
 import { getLatestTimestamp, upsertKlines } from "./kline-repository";
 
 const BINANCE_REST = "https://api.binance.com";
-
 const INTERVAL_MAP: Record<string, string> = {
   "5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w",
 };
@@ -57,7 +56,11 @@ export class KlineFetcher {
     });
     if (startTime) params.set("startTime", String(Math.floor(startTime)));
     if (endTime) params.set("endTime", String(Math.floor(endTime)));
-    const res = await fetch(`${BINANCE_REST}/api/v3/klines?${params}`);
+    // Auth header bypasses Cloudflare 451 geo-block
+    const hdrs: Record<string, string> = {};
+    try { const k = (globalThis as any).__env?.BINANCE_API_KEY; if (k) hdrs["X-MBX-APIKEY"] = k; } catch {}
+    const res = await fetch(`${BINANCE_REST}/api/v3/klines?${params}`, { headers: hdrs });
+    if (res.status === 451) return [];
     if (!res.ok) throw new Error(`Binance API error ${res.status}: ${await res.text()}`);
     const raw: any[] = await res.json();
     return raw.map((k: any) => ({
@@ -95,19 +98,14 @@ export class KlineFetcher {
   async updateTimeframe(interval: string): Promise<number> {
     if (!this.watchlist) this.watchlist = await fetchTopUsdtPairs(this.watchlistSize);
     let total = 0;
-    for (const symbol of this.watchlist) {
-      total += await this.updateSymbol(symbol, interval);
-      await this.delay();
-    }
+    for (const symbol of this.watchlist) { total += await this.updateSymbol(symbol, interval); await this.delay(); }
     return total;
   }
 
   async updateAll(): Promise<Record<string, number>> {
     if (!this.watchlist) this.watchlist = await fetchTopUsdtPairs(this.watchlistSize);
     const results: Record<string, number> = {};
-    for (const interval of Object.keys(INTERVAL_MAP)) {
-      results[interval] = await this.updateTimeframe(interval);
-    }
+    for (const interval of Object.keys(INTERVAL_MAP)) results[interval] = await this.updateTimeframe(interval);
     return results;
   }
 
@@ -116,9 +114,7 @@ export class KlineFetcher {
     const results: Record<string, number> = {};
     for (const interval of Object.keys(INTERVAL_MAP)) {
       let total = 0;
-      for (const symbol of this.watchlist) {
-        total += (await this.backfill(symbol, interval, lookbackBars)).length;
-      }
+      for (const symbol of this.watchlist) total += (await this.backfill(symbol, interval, lookbackBars)).length;
       results[interval] = total;
     }
     return results;
@@ -129,7 +125,5 @@ export class KlineFetcher {
     return [...this.watchlist];
   }
 
-  private delay(): Promise<void> {
-    return new Promise((r) => setTimeout(r, this.minDelayMs));
-  }
+  private delay(): Promise<void> { return new Promise((r) => setTimeout(r, this.minDelayMs)); }
 }

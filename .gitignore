@@ -9,3 +9,4 @@ scripts/*.json
 *.pyc
 __pycache__/
 .codex/
+.vercel
