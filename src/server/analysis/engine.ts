@@ -186,7 +186,7 @@ export async function runAnalysisEngine(
 
   try {
     const fetcher = new KlineFetcher();
-    const watchlist = fetcher.getWatchlist();
+    const watchlist = await fetcher.getWatchlist();
 
     // 1. Fetch latest klines for all symbols
     const klineUpdates = await fetcher.updateTimeframe(timeframe);

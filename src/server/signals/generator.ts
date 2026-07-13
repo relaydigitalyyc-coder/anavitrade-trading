@@ -20,16 +20,22 @@ import { scoreSignal } from "../coinlegs-scraper";
 import { validateStructure, structuralConfidenceMultiplier } from "../smc/validator";
 import { getDb } from "../db";
 import { tradeIntents, coinlegsSignals } from "../../drizzle/schema";
-import { desc } from "drizzle-orm";
+import { desc, and, eq, gte } from "drizzle-orm";
 import { createExecutionJobsForIntent } from "../execution/dispatch";
+import { idempotencyKey } from "../analysis/dispatcher";
+import { analysisSignals } from "../../drizzle/schema";
+
+// Shared ATR estimates (must match engine.ts / dispatcher.ts)
+const ATR_PCT: Record<string, number> = {
+  "5m": 0.3, "15m": 0.5, "30m": 0.8, "1h": 1.2, "2h": 1.5, "4h": 2.0, "1d": 3.5, "1w": 6.0,
+};
+const RR = 2; // fixed 1:2 risk-reward (unified with engine.ts buildSignal)
 
 const BINANCE_EXCHANGE_INFO = "https://fapi.binance.com/fapi/v1/exchangeInfo";
 const BINANCE_KLINES = "https://fapi.binance.com/api/v1/klines";
 
 const TIMEFRAMES = ["1h", "2h", "4h"] as const;
 const CANDLES_PER_TF: Record<string, number> = { "1h": 60, "2h": 60, "4h": 60 };
-const MIN_PAIRS = 150;
-
 export type GeneratorResult = {
   pairs: number;
   signalsDetected: number;
@@ -61,11 +67,7 @@ async function fetchTopPairs(): Promise<string[]> {
       return vb - va;
     });
 
-  if (usdtPairs.length < MIN_PAIRS) {
-    throw new Error(`Only ${usdtPairs.length} USDT pairs found`);
-  }
-
-  return usdtPairs.slice(0, 200).map((s: any) => s.symbol);
+  return usdtPairs.map((s: any) => s.symbol);
 }
 
 /* ─── Kline Fetching ────────────────────────────────────────────────────── */
@@ -132,18 +134,42 @@ async function dispatchSignal(sig: IndicatorSignal, confluenceCount: number): Pr
 
     const confidence = structuralConfidenceMultiplier(structural.score);
 
-    // Unified ATR-based SL/TP (consistent with analysis engine buildSignal):
-    //   stopBuffer = atrEstimate * 1.5  (ATR percentage scaled by 1.5x)
-    //   takeProfit = entry * (1 + stopBuffer * rr) with rr = 2 (fixed 1:2 R:R)
-    const atrEst: Record<string, number> = { "4h": 2.0, "2h": 1.5, "1h": 1.2 };
-    const stopPct = (atrEst[sig.period] || 1.5) * 1.5;
-    const rr = 2;
+    // Unified ATR-based SL/TP (shared ATR_PCT + RR from this file's top-level
+    // constants, matching engine.ts buildSignal and dispatcher.ts dispatchSignal)
+    const stopPct = (ATR_PCT[sig.period] || 1.5) * 1.5;
     const stopPrice = sig.price > 0 ? (sig.price * (1 - stopPct / 100)).toFixed(8) : null;
-    const tpPrice = sig.price > 0 ? (sig.price * (1 + (stopPct * rr) / 100)).toFixed(8) : null;
+    const tpPrice = sig.price > 0 ? (sig.price * (1 + (stopPct * RR) / 100)).toFixed(8) : null;
+
+    // Build a UnifiedSignal-like object for the shared idempotency key format,
+    // so both pipelines share the same dedup namespace.
+    const dedupSignal = {
+      source: "anavitrade-native",
+      symbol: sig.marketName.replace("USDT", ""),
+      timeframe: sig.period,
+      direction: "long" as const,
+      timestamp: sig.signalTime,
+    };
+    const dedupKey = idempotencyKey(dedupSignal as any, sig.signalTime);
+
+    // 24h gap: skip if this (symbol, timeframe) had a dispatched signal recently
+    const gap24h = Date.now() - 24 * 60 * 60 * 1000;
+    const [recent] = await db.select()
+      .from(analysisSignals)
+      .where(and(
+        eq(analysisSignals.symbol, sig.marketName),
+        eq(analysisSignals.timeframe, sig.period),
+        eq(analysisSignals.dispatched, 1),
+        gte(analysisSignals.createdAt, gap24h),
+      ))
+      .limit(1);
+    if (recent) {
+      console.log(`[generator] 24h gap skipped ${sig.marketName} ${sig.period} ${sig.indicator}`);
+      return null;
+    }
 
     const intent = await db.insert(tradeIntents).values({
       source: "anavitrade-native",
-      externalSignalId: `${sig.marketName}_${sig.period}_${sig.indicator}_${sig.signalTime}`,
+      externalSignalId: dedupKey,
       symbol: sig.marketName.replace("USDT", ""),
       side: "buy",
       orderType: "market",
@@ -179,7 +205,7 @@ export async function generateSignals(): Promise<GeneratorResult> {
     const symbols = await fetchTopPairs();
     pairs = symbols.length;
 
-    for (const symbol of symbols.slice(0, 150)) { // top 150 by volume
+    for (const symbol of symbols) { // scan every USDT perpetual
       for (const tf of TIMEFRAMES) {
         const candles = await fetchKlines(symbol, tf, CANDLES_PER_TF[tf]);
         if (candles.length < 26) continue; // need enough data for indicators

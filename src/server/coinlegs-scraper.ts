@@ -241,7 +241,7 @@ export async function runCoinlegsScraper() {
     }
 
     // Single batch query: find which signalIds already exist (within 24h window)
-    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const last24h = Date.now() - 24 * 60 * 60 * 1000;
     let existingIds: Set<number>;
     if (signalCandidates.length > 0) {
       const lookupIds = signalCandidates.map((c) => c.lookupId);
@@ -328,14 +328,29 @@ export async function runCoinlegsScraper() {
         price: String(r.price),
         lastPrice: r.lastPrice ?? null,
         percentage24: r.pct24Str ? String(r.pct24Str) : null,
+        minPrice: null, maxPrice: null,
         maxProfit: String(r.maxProfit),
         maxProfitDuration: r.duration ?? null,
-        signalDate: r.dateStr ? new Date(r.dateStr) : new Date(),
-        signalDateUtc: r.dateStr ?? new Date().toISOString(),
-        recordDate: r.recStr ? new Date(r.recStr) : new Date(),
+        signalDate: Number(r.dateStr ? new Date(r.dateStr).getTime() : Date.now()),
+        signalDateUtc: r.dateStr ?? null,
+        recordDate: Number(r.recStr ? new Date(r.recStr).getTime() : Date.now()),
         qualityScore: r.score, qualityTier: r.tier,
+        scrapedAt: Date.now(),
+        outcomeValidated: 0, actualMaxProfitPct: null,
+        actualDrawdownPct: null, outcomeWarning: 0,
       }));
-      await db!.insert(coinlegsSignals).values(values as any);
+      // Access raw D1 binding to bypass Drizzle ORM Date serialization entirely
+      const D1 = (db! as any).session?.db as D1Database;
+      if (D1) {
+        const stmts: D1PreparedStatement[] = [];
+        for (const row of values) {
+          const cols = Object.keys(row as Record<string, unknown>);
+          const ph = cols.map(() => "?").join(", ");
+          const q = `INSERT OR IGNORE INTO coinlegs_signals ("${cols.join('", "')}") VALUES (${ph})`;
+          stmts.push(D1.prepare(q).bind(...cols.map((c) => (row as any)[c])));
+        }
+        await D1.batch(stmts);
+      }
     }
     signalsInserted += insertRows.length;
 
@@ -483,12 +498,17 @@ export async function runCoinlegsScraper() {
   if (smcRejected > 0) console.log(`[CoinlegsScraper] SMC gating: ${smcPassed} passed, ${smcRejected} rejected`);
 
   try {
-    await db!.insert(scraperRuns).values({
-      status, signalsFetched, signalsInserted, signalsDuplicate,
-      tierA, tierB, tierC: signalsInserted - tierA - tierB,
-      errorMessage, startedAt, completedAt,
-      durationMs: completedAt.getTime() - startedAt.getTime(),
-    } as any);
+      // D1 needs raw epoch ms for integer columns — avoid Drizzle Date serialization
+      const now = Date.now();
+      const scrub = (v: unknown): number => (v instanceof Date ? v.getTime() : Number(v));
+      await db!.insert(scraperRuns).values({
+        status, signalsFetched, signalsInserted, signalsDuplicate,
+        tierA, tierB, tierC: signalsInserted - tierA - tierB,
+        errorMessage,
+        startedAt: scrub(startedAt),
+        completedAt: scrub(completedAt),
+        durationMs: scrub(completedAt) - scrub(startedAt),
+      } as any);
   } catch { /* best effort */ }
 
   return { status, signalsFetched, signalsInserted, signalsDuplicate, tierA, tierB, tierC: signalsInserted - tierA - tierB, intentIds, durationMs: completedAt.getTime() - startedAt.getTime(), errorMessage: errorMessage ?? null };

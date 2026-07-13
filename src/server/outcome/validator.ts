@@ -108,7 +108,7 @@ export async function validateSignalOutcomes(): Promise<OutcomeValidationSummary
   let accuracySum = 0;
 
   // Only validate signals older than 1 hour so their maxProfit duration has elapsed.
-  const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+  const cutoff = Date.now() - 60 * 60 * 1000;
 
   const pending = await db.select()
     .from(coinlegsSignals)
@@ -116,7 +116,7 @@ export async function validateSignalOutcomes(): Promise<OutcomeValidationSummary
       and(
         eq(coinlegsSignals.outcomeValidated, 0),
         eq(coinlegsSignals.signal, 1),
-        lte(coinlegsSignals.scrapedAt, cutoff),
+        sql`${coinlegsSignals.scrapedAt} <= ${cutoff}`,
       ),
     )
     .limit(50) // batch size for cron safety
@@ -149,7 +149,7 @@ export async function validateSignalOutcomes(): Promise<OutcomeValidationSummary
         continue;
       }
 
-      const signalTs = new Date(signal.signalDate).getTime();
+      const signalTs = Number(signal.signalDate);
       const windowEnd = signalTs + durationMs;
 
       // Find the candle closest to signalDate (entry)

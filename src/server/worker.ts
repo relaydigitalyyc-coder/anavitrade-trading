@@ -460,10 +460,44 @@ app.post("/api/fee/crystallize", async (c) => {
   }
 });
 
-/* ── Cron throttle counter ────────────────────────────────────────────
- * Prevents expensive jobs from running on every 60-second fire.
+/* ── Cron throttle counter (persisted to D1 so it survives Worker restarts) ──
+ * Prevents expensive jobs from running on every 60-second fire.  Read from
+ * global_settings at the start of each cron run, write back at the end.
  * Reset at 2880 (~48h worth of fires) to avoid integer overflow. */
-let _cronCount = 0;
+const CRON_COUNTER_KEY = "cron_counter";
+
+async function loadCronCount(): Promise<number> {
+  try {
+    const db = (await import("./db")).getDb();
+    const { eq } = await import("drizzle-orm");
+    const { globalSettings } = await import("../drizzle/schema");
+    const [row] = await db.select({ value: globalSettings.value })
+      .from(globalSettings)
+      .where(eq(globalSettings.key, CRON_COUNTER_KEY))
+      .limit(1);
+    if (row) return parseInt(row.value, 10) || 0;
+  } catch { /* first run — no row yet */ }
+  return 0;
+}
+
+async function saveCronCount(count: number): Promise<void> {
+  try {
+    const db = (await import("./db")).getDb();
+    const { eq } = await import("drizzle-orm");
+    const { globalSettings } = await import("../drizzle/schema");
+    const [existing] = await db.select({ id: globalSettings.id })
+      .from(globalSettings)
+      .where(eq(globalSettings.key, CRON_COUNTER_KEY))
+      .limit(1);
+    if (existing) {
+      await db.update(globalSettings).set({ value: String(count), updatedAt: Date.now() } as any)
+        .where(eq(globalSettings.id, existing.id));
+    } else {
+      await db.insert(globalSettings).values({ key: CRON_COUNTER_KEY, value: String(count), updatedAt: Date.now() } as any)
+        .onConflictDoNothing();
+    }
+  } catch { /* best-effort */ }
+}
 
 export default {
   fetch: app.fetch,
@@ -481,7 +515,7 @@ export default {
    */
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     setDbEnv(env);
-    _cronCount++;
+    const _cronCount = await loadCronCount() + 1;
 
     const results: Record<string, unknown> = {};
 
@@ -558,7 +592,8 @@ export default {
     }
 
     // Prevent unbounded growth of the throttle counter
-    if (_cronCount >= 2880) _cronCount = 1;
+    const finalCount = _cronCount >= 2880 ? 1 : _cronCount;
+    await saveCronCount(finalCount);
 
     console.log("[anavitrade-cron]", JSON.stringify(results));
   },

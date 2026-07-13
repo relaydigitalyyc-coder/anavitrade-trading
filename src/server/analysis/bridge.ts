@@ -78,11 +78,7 @@ export function coinlegsRowToUnifiedSignal(
     components,
     structuralScore: 50,
     confidence: 0.5,
-    timestamp: row.signalDate instanceof Date
-      ? row.signalDate.getTime()
-      : typeof row.signalDate === "number"
-        ? row.signalDate
-        : Date.now(),
+    timestamp: row.signalDate,
     metadata: {
       signalId: row.signalId,
       indicatorName: row.indicatorName,

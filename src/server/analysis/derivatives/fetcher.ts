@@ -1,20 +1,40 @@
 import type { DerivativesSnapshot } from "../types";
 
+const BINANCE_EXCHANGE_INFO = "https://fapi.binance.com/fapi/v1/exchangeInfo";
 const BINANCE_FUTURES = "https://fapi.binance.com";
 
-const WATCHLIST = [
-  "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-  "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT",
-  "MATICUSDT", "UNIUSDT", "SHIBUSDT", "LTCUSDT", "ATOMUSDT",
-];
+async function fetchTopUsdtPairs(limit?: number): Promise<string[]> {
+  const res = await fetch(BINANCE_EXCHANGE_INFO);
+  if (!res.ok) throw new Error(`exchangeInfo HTTP ${res.status}`);
+  const data = await res.json() as any;
+  const symbols = (data?.symbols ?? []) as any[];
+  return symbols
+    .filter((s: any) =>
+      s.symbol?.endsWith("USDT") &&
+      s.status === "TRADING" &&
+      s.contractType === "PERPETUAL")
+    .sort((a: any, b: any) => {
+      const va = parseFloat(a.volume24h || a.quoteVolume24h || a.volume || "0");
+      const vb = parseFloat(b.volume24h || b.quoteVolume24h || b.volume || "0");
+      return vb - va;
+    })
+    .slice(0, limit ?? undefined)
+    .map((s: any) => s.symbol);
+}
 
 export class DerivativesFetcher {
-  private watchlist: string[];
+  private watchlist: string[] | null = null;
+  private watchlistSize: number | undefined;
   private minDelayMs: number;
 
-  constructor(watchlist?: string[], minDelayMs = 200) {
-    this.watchlist = watchlist ?? WATCHLIST;
+  constructor(watchlistSize?: number, minDelayMs = 200) {
+    this.watchlistSize = watchlistSize;
     this.minDelayMs = minDelayMs;
+  }
+
+  private async ensureWatchlist(): Promise<string[]> {
+    if (!this.watchlist) this.watchlist = await fetchTopUsdtPairs(this.watchlistSize);
+    return this.watchlist;
   }
 
   /**
@@ -95,8 +115,9 @@ export class DerivativesFetcher {
    * Fetch snapshots for all watchlist symbols.
    */
   async snapshotAll(): Promise<DerivativesSnapshot[]> {
+    await this.ensureWatchlist();
     const snapshots: DerivativesSnapshot[] = [];
-    for (const sym of this.watchlist) {
+    for (const sym of this.watchlist!) {
       const snap = await this.snapshotSymbol(sym);
       snapshots.push(snap);
       await this.delay();
@@ -104,8 +125,9 @@ export class DerivativesFetcher {
     return snapshots;
   }
 
-  getWatchlist(): string[] {
-    return [...this.watchlist];
+  async getWatchlist(): Promise<string[]> {
+    await this.ensureWatchlist();
+    return [...this.watchlist!];
   }
 
   private delay(): Promise<void> {

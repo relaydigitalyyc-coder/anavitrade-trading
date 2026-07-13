@@ -103,7 +103,7 @@ export async function runPaperEngine(
 }> {
   const db = getDb();
   const fetcher = new KlineFetcher();
-  const watchlist = fetcher.getWatchlist();
+  const watchlist = await fetcher.getWatchlist();
 
   const qualified: UnifiedSignal[] = [];
   let signalsFound = 0;

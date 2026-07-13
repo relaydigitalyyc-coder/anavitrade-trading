@@ -144,7 +144,7 @@ export async function runMirror(
 ): Promise<MirrorRunResult[]> {
   const db = getDb();
   const fetcher = new KlineFetcher();
-  const watchlist = symbols ?? fetcher.getWatchlist();
+  const watchlist = symbols ?? (await fetcher.getWatchlist());
   const tfs = timeframes ?? COINLEGS_TIMEFRAMES;
   const results: MirrorRunResult[] = [];
   const startedAt = Date.now();
@@ -401,7 +401,7 @@ export async function compareWithCoinlegs(
   }
 
   // 2. Fetch Coinlegs signals from the same window
-  const cutoffDate = new Date(cutoff);
+  const cutoffDate = cutoff;
   const clRows = await db
     .select()
     .from(coinlegsSignals)
@@ -431,12 +431,7 @@ export async function compareWithCoinlegs(
     const typeId = mapCoinlegsIndicatorToType(row.indicatorName ?? "");
     if (!sym || !tf || typeId === null) continue;
 
-    const signalDateMs =
-      row.signalDate instanceof Date
-        ? row.signalDate.getTime()
-        : typeof row.signalDate === "number"
-          ? row.signalDate
-          : Date.now();
+    const signalDateMs = Number(row.signalDate) || Date.now();
 
     coinlegsRecords.push({
       key: signalKey(sym, tf, typeId),

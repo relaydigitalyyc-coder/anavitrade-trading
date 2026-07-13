@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, RefreshCw, Trophy, Activity, Flame } from "lucide-react";
 
 interface Signal {
+  [key: string]: unknown;
   id?: number;
   signal?: number;
   marketName?: string;
@@ -13,10 +14,9 @@ interface Signal {
   maxProfit?: string | number | null;
   maxProfitDuration?: string | null;
   signalDateUtc?: string | null;
-  signalDate?: string | Date;
+  signalDate?: string | Date | number;
   qualityScore?: number;
   qualityTier?: string;
-  [key: string]: unknown;
 }
 
 interface LiveSignalFeedProps {
@@ -198,7 +198,7 @@ export default function LiveSignalFeed({
                     <div className="text-xs text-muted-foreground mt-0.5">{sig.indicatorName}</div>
                   </td>
                   <td className="py-3 pr-4 text-xs text-muted-foreground whitespace-nowrap font-mono">
-                    {fmtSignalDate(utcStr, sig.signalDate)}
+                    {fmtSignalDate(utcStr, sig.signalDate != null ? new Date(Number(sig.signalDate)) : new Date())}
                   </td>
                   <td className="py-3 pr-4 font-mono text-xs text-foreground whitespace-nowrap">
                     ${fmtPrice(price)}

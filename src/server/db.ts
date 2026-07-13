@@ -404,7 +404,7 @@ export async function getPublicDemoStats() {
     .from(demoTrades).where(and(eq(demoTrades.demoAccountId, account.id), eq(demoTrades.status, 'closed')));
   const [{ avgPnlPct }] = await db.select({ avgPnlPct: sql`AVG(CAST(${demoTrades.pnlPct} AS REAL))` })
     .from(demoTrades).where(and(eq(demoTrades.demoAccountId, account.id), eq(demoTrades.status, 'closed')));
-  const julyStart = new Date("2026-07-01T00:00:00Z");
+  const julyStart = new Date("2026-07-01T00:00:00Z").getTime();
   const [{ tierAJulyCount }] = await db.select({ tierAJulyCount: sql`count(*)` })
     .from(coinlegsSignals).where(and(eq(coinlegsSignals.signal, 1), eq(coinlegsSignals.qualityTier, 'A'), gte(coinlegsSignals.signalDate, julyStart)));
   return {
@@ -475,7 +475,7 @@ export async function syncSignalsToDemoAccounts(): Promise<{ accountsProcessed: 
           if (s.id > lastId) newSignals.push(s);
         }
       }
-      newSignals.sort((a, b) => a.signalDate.getTime() - b.signalDate.getTime());
+      newSignals.sort((a, b) => (a.signalDate as number) - (b.signalDate as number));
 
       if (newSignals.length === 0) continue;
       let currentBalance = parseFloat(account.currentBalance);
@@ -523,7 +523,7 @@ export async function syncSignalsToDemoAccounts(): Promise<{ accountsProcessed: 
         const positionSizePct = riskPct * leverage;
         let effectivePositionPct = positionSizePct;
         if (account.pyramidingEnabled) {
-          const pyramidWindow = new Date(signal.signalDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const pyramidWindow = new Date(Number(signal.signalDate) - 7 * 24 * 60 * 60 * 1000);
           const [{ pyramidCount }] = await db.select({ pyramidCount: sql`count(*)` }).from(demoTrades).where(
             and(eq(demoTrades.demoAccountId, account.id), eq(demoTrades.pair, signal.marketName), sql`${demoTrades.openedAt} >= ${pyramidWindow}`)
           );
@@ -541,7 +541,7 @@ export async function syncSignalsToDemoAccounts(): Promise<{ accountsProcessed: 
         const pnl = Math.min(Math.max(rawPnl, -positionValueUsd), maxPnl);
         const openedAt = signal.signalDate;
         const durationMs = parseDurationToMs(signal.maxProfitDuration) ?? (4 * 60 * 60 * 1000);
-        const closedAt = new Date(openedAt.getTime() + durationMs);
+        const closedAt = new Date(Number(openedAt) + durationMs);
         accountTradeRows.push({
           demoAccountId: account.id, signalId: signal.id, pair: signal.marketName, side: "buy",
           entryPrice: String(entryPrice), exitPrice: String(exitPrice), quantity: String(quantity),
@@ -1081,8 +1081,8 @@ export async function getScraperStatus() {
 
 export async function getJulyResults() {
   const db = getDb();
-  const julyStart = new Date("2026-07-01T00:00:00Z");
-  const julyEnd = new Date("2026-08-01T00:00:00Z");
+  const julyStart = new Date("2026-07-01T00:00:00Z").getTime();
+  const julyEnd = new Date("2026-08-01T00:00:00Z").getTime();
   const taken = await db.select({
     id: coinlegsSignals.id, marketName: coinlegsSignals.marketName,
     indicatorShortName: coinlegsSignals.indicatorShortName, period: coinlegsSignals.period,
