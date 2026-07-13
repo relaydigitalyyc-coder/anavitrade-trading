@@ -1,4 +1,4 @@
-export type SignalSource = "coinlegs" | "icr" | "coil" | "derivatives";
+export type SignalSource = "coinlegs" | "icr" | "coil" | "derivatives" | "anavitrade-native" | "mirror_fallback";
 
 export interface Kline {
   symbol: string;

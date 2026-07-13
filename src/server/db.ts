@@ -17,6 +17,12 @@ import { nanoid } from "nanoid";
 let _db: ReturnType<typeof drizzle> | null = null;
 let _env: Env | null = null;
 
+/** Expose the raw D1 binding for operations that bypass Drizzle ORM Date serialization. */
+export function getRawD1(): any {
+  if (!_env) throw new Error("Env not set — call setDbEnv() first");
+  return _env.DB;
+}
+
 export function setDbEnv(env: Env) {
   _env = env;
   _db = drizzle(env.DB);

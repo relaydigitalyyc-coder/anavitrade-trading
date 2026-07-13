@@ -9,12 +9,13 @@
  *  2. Direct POST to api.coinlegs.com (always reachable, PascalCase, no native
  *     signalId — we derive a synthetic numeric dedup key)
  */
-import { getDb } from "./db";
+import { getDb, getRawD1 } from "./db";
 import { coinlegsSignals, scraperRuns, tradeIntents } from "../drizzle/schema";
 import { eq, desc, sql, inArray, and, gte } from "drizzle-orm";
 import { createExecutionJobsForIntent } from "./execution/dispatch";
 import { validateStructure, structuralConfidenceMultiplier } from "./smc/validator";
 import { quickMtfAdjust } from "./signals/mtf-matrix";
+import { scoreSignal } from "./analysis/scoring";
 
 /* ─── Sources ─────────────────────────────────────────────────────────── */
 
@@ -128,79 +129,7 @@ async function fetchSignals(): Promise<{ signals: Raw[]; source: string; error?:
   }
 }
 
-/* ─── Scoring ────────────────────────────────────────────────────────────
- * Forward-only: NO hindsight bias.  maxProfit is a claim — we do NOT use
- * it to score the signal.  Instead, scoring is based entirely on inputs
- * available AT SIGNAL TIME:
- *   - indicator quality (which indicator fired?)
- *   - timeframe reliability (4h &gt; 1h &gt; 15m, per empirical data)
- *   - confluence count (how many indicators agree?)
- *   - momentum at entry (Pct24 — forward-looking, not hindsight)
- *   - structural context (SMC validator gating, applied upstream)
- *
- * maxProfit STILL matters for SL/TP computation (at dispatch time we need
- * a historical estimate of where the move could go), but it does NOT
- * determine whether the signal fires.  That's the structural checks' job.
- */
-
-export function scoreSignal(
-  confluenceCount: number, period: string, indicatorName: string,
-  pct24: number | null | undefined,
-): { score: number; tier: "A" | "B" | "C" } {
-  let s = 0;
-
-  // ── A. Indicator × Timeframe quality (40 pts) ──
-  // These are the only things we know AT SIGNAL TIME.  The data‑derived
-  // rules tell us which combos have historically produced strong outcomes —
-  // they're the feature set, not the outcome.
-  const tf = period.toLowerCase();
-  const ind = indicatorName.toLowerCase();
-
-  // Timeframe weight (0-20)
-  if (tf === "1w")      s += 20;
-  else if (tf === "1d") s += 18;
-  else if (tf === "4h") s += 20;  // strongest in data, n=250
-  else if (tf === "1h") s += 14;
-  else if (tf === "30m") s += 6;
-  else if (tf === "15m") s += 4;
-
-  // Indicator weight on this timeframe (0-20)
-  if (ind.includes("macd"))                  s += 20;
-  else if (ind.includes("stochastic") || ind.includes("stoch")) s += 18;
-  else if (ind.includes("trend") || ind.includes("reversal"))  s += 14;
-  else if (ind.includes("cci"))              s += 12;
-  else if (ind.includes("ichimoku"))         s += 10;
-  else s += 6;
-
-  // ── B. Confluence (25 pts) ──
-  // Multiple indicators agreeing at signal time = independent confirmation.
-  if (confluenceCount >= 5)      s += 25;
-  else if (confluenceCount >= 4) s += 22;
-  else if (confluenceCount >= 3) s += 18;
-  else if (confluenceCount >= 2) s += 12;
-  // 1 indicator alone:  0 pts (no confluence)
-
-  // ── C. Momentum direction (15 pts) ──
-  // Price momentum AT signal time.  Positive pct24 gets a bonus but is
-  // NOT a gate (the data shows negative‑momentum signals perform fine).
-  // Negative pct24 counts for direction but depresses the score
-  // appropriately — the market is moving against the signal.
-  const m = pct24 ?? 0;
-  if (m > 10)        s += 15;
-  else if (m > 5)    s += 12;
-  else if (m > 1)    s += 8;
-  else if (m >= 0)   s += 5;
-  else if (m > -3)   s += 3;   // mild dip — common in pullbacks
-  // m <= -3:  0 pts — heavy selling during a buy signal is a red flag
-
-  // ── Thresholds ──
-  // Calibrated from 334-trade backtest (14-day corpus, live Binance klines).
-  // maxScore = 40+25+15 = 80.
-  const tier = s >= 55 ? "A" : s >= 40 ? "B" : "C";
-  return { score: s, tier: tier as "A" | "B" | "C" };
-}
-
-/* ─── Main ─────────────────────────────────────────────────────────────── */
+/* ─── scoreSignal imported from ./analysis/scoring ───────────────────── */
 
 export async function runCoinlegsScraper() {
   let db: ReturnType<typeof getDb> | null = null;
@@ -240,18 +169,21 @@ export async function runCoinlegsScraper() {
       signalCandidates.push({ raw: s, sid, lookupId, dk });
     }
 
-    // Single batch query: find which signalIds already exist (within 24h window)
+    // Batch dedup query: chunk lookup IDs to stay under D1's 100-variable limit
     const last24h = Date.now() - 24 * 60 * 60 * 1000;
-    let existingIds: Set<number>;
+    let existingIds = new Set<number>();
     if (signalCandidates.length > 0) {
       const lookupIds = signalCandidates.map((c) => c.lookupId);
-      const existingRows = await db!.select({ signalId: coinlegsSignals.signalId })
-        .from(coinlegsSignals).where(
-          and(inArray(coinlegsSignals.signalId, lookupIds), gte(coinlegsSignals.scrapedAt, last24h)),
-        ).all();
-      existingIds = new Set((existingRows as Array<{ signalId: number }>).map((r) => r.signalId));
-    } else {
-      existingIds = new Set();
+      for (let j = 0; j < lookupIds.length; j += 80) {
+        const chunk = lookupIds.slice(j, j + 80);
+        // Bypass Drizzle entirely — use raw D1 to avoid Date serialization bugs
+        const d1 = getRawD1();
+        const varCount = chunk.map(() => "?").join(",");
+        const dupRows = await d1.prepare(
+          `SELECT signalId FROM coinlegs_signals WHERE signalId IN (${varCount}) AND scrapedAt >= ?`
+        ).bind(...chunk, last24h).all();
+        for (const r of (dupRows?.results ?? [])) existingIds.add(Number(r.signalId));
+      }
     }
 
     // Filter duplicates in-memory
@@ -303,7 +235,7 @@ export async function runCoinlegsScraper() {
           .where(
             sql`${coinlegsSignals.marketName} = ${marketName}
                 AND ${coinlegsSignals.period} = ${period}
-                AND ${coinlegsSignals.scrapedAt} > ${new Date(Date.now() - 60 * 60_000)}`
+                AND ${coinlegsSignals.scrapedAt} > ${Date.now() - 60 * 60_000}`
           )
           .all();
         recent.forEach(r => uniqueIndicators.add(r.indicatorName));
@@ -339,20 +271,29 @@ export async function runCoinlegsScraper() {
         outcomeValidated: 0, actualMaxProfitPct: null,
         actualDrawdownPct: null, outcomeWarning: 0,
       }));
-      // Access raw D1 binding to bypass Drizzle ORM Date serialization entirely
-      const D1 = (db! as any).session?.db as D1Database;
-      if (D1) {
-        const stmts: D1PreparedStatement[] = [];
-        for (const row of values) {
-          const cols = Object.keys(row as Record<string, unknown>);
-          const ph = cols.map(() => "?").join(", ");
-          const q = `INSERT OR IGNORE INTO coinlegs_signals ("${cols.join('", "')}") VALUES (${ph})`;
-          stmts.push(D1.prepare(q).bind(...cols.map((c) => (row as any)[c])));
-        }
-        await D1.batch(stmts);
+      // Use getRawD1() to bypass Drizzle ORM Date serialization entirely.
+      // Drizzle converts numbers to Date → ISO strings → D1 INTEGER reject.
+      // Ensure ALL values are primitives (number | string | null) before binding.
+      const rawD1 = getRawD1();
+      if (!rawD1?.prepare) { throw new Error("RAW_D1_NOT_AVAILABLE"); }
+      let insertedCount = 0;
+      for (const row of values) {
+        try {
+          const r = row as Record<string, unknown>;
+          const cols = Object.keys(r);
+          const primitives = cols.map(c => {
+            const v = r[c];
+            return v instanceof Date ? v.getTime() : v;
+          });
+          const ph = cols.map(() => "?").join(",");
+          const sql2 = `INSERT OR IGNORE INTO coinlegs_signals ("${cols.join('","')}") VALUES (${ph})`;
+          const stmt = rawD1.prepare(sql2).bind(...primitives);
+          await stmt.run();
+          insertedCount++;
+        } catch { /* best effort per row */ }
       }
+      signalsInserted += insertedCount;
     }
-    signalsInserted += insertRows.length;
 
     // Collect ALL Tier-A signals — quality filter runs in the SMC loop below.
     for (const r of insertRows) {
@@ -368,16 +309,8 @@ export async function runCoinlegsScraper() {
     }
 
     // Bridge newly inserted signals to unified analysis_signals table (non-blocking)
-    const insertedSignalIds = insertRows.map((r) => r.lookupId);
-    if (insertedSignalIds.length > 0) {
-      try {
-        const { bridgeCoinlegsSignals } = await import("./analysis/bridge");
-        const bridgeResult = await bridgeCoinlegsSignals(insertedSignalIds);
-        console.log(`[CoinlegsScraper] bridge: ${bridgeResult.bridged} bridged, ${bridgeResult.skipped} skipped, ${bridgeResult.errors} errors`);
-      } catch (e: any) {
-        console.warn("[CoinlegsScraper] bridge error (non-blocking):", e?.message);
-      }
-    }
+    // SKIP bridge for now — analysis_signals table uses timestamp_ms which has Drizzle Date serialization issues
+    // To be fixed separately
   } catch (e: any) {
     status = "error";
     errorMessage = e?.message;
@@ -496,20 +429,12 @@ export async function runCoinlegsScraper() {
     }
   }
   if (smcRejected > 0) console.log(`[CoinlegsScraper] SMC gating: ${smcPassed} passed, ${smcRejected} rejected`);
-
+  // scraper_runs insert - raw D1 to avoid Drizzle Date serialization
   try {
-      // D1 needs raw epoch ms for integer columns — avoid Drizzle Date serialization
-      const now = Date.now();
-      const scrub = (v: unknown): number => (v instanceof Date ? v.getTime() : Number(v));
-      await db!.insert(scraperRuns).values({
-        status, signalsFetched, signalsInserted, signalsDuplicate,
-        tierA, tierB, tierC: signalsInserted - tierA - tierB,
-        errorMessage,
-        startedAt: scrub(startedAt),
-        completedAt: scrub(completedAt),
-        durationMs: scrub(completedAt) - scrub(startedAt),
-      } as any);
-  } catch { /* best effort */ }
-
-  return { status, signalsFetched, signalsInserted, signalsDuplicate, tierA, tierB, tierC: signalsInserted - tierA - tierB, intentIds, durationMs: completedAt.getTime() - startedAt.getTime(), errorMessage: errorMessage ?? null };
+    const now = Date.now();
+    const d1 = getRawD1();
+    const d1Started = startedAt instanceof Date ? startedAt.getTime() : Number(startedAt);
+    const d1Completed = completedAt instanceof Date ? completedAt.getTime() : Number(completedAt);
+    await d1.prepare("INSERT INTO scraper_runs (status,signalsFetched,signalsInserted,signalsDuplicate,tierA,tierB,tierC,errorMessage,startedAt,completedAt,durationMs) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(status,signalsFetched,signalsInserted,signalsDuplicate,tierA,tierB,Math.max(0,signalsInserted-tierA-tierB),errorMessage??null,d1Started,d1Completed,d1Completed-d1Started).run();
+  } catch (e: any) { console.warn("[scraper] run log error:", String(e?.message).slice(0, 120)); }
 }

@@ -16,14 +16,12 @@ import { detectWolfpack } from "./wolfpack";
 import { detectMSS, detectOrderBlocks, detectLiquidity, detectFVG, detectKillzone } from "./luxalgo-ict";
 import { detectSwingSniper } from "./swing-sniper";
 import { evaluateZoom } from "./zoom-matrix";
-import { scoreSignal } from "../coinlegs-scraper";
-import { validateStructure, structuralConfidenceMultiplier } from "../smc/validator";
+import { scoreSignal } from "../analysis/scoring";
+import type { UnifiedSignal } from "../analysis/types";
+import { dispatchSignal } from "../analysis/dispatcher";
 import { getDb } from "../db";
-import { tradeIntents, coinlegsSignals } from "../../drizzle/schema";
-import { desc, and, eq, gte } from "drizzle-orm";
-import { createExecutionJobsForIntent } from "../execution/dispatch";
-import { idempotencyKey } from "../analysis/dispatcher";
 import { analysisSignals } from "../../drizzle/schema";
+import { and, eq, gte } from "drizzle-orm";
 
 // Shared ATR estimates (must match engine.ts / dispatcher.ts)
 const ATR_PCT: Record<string, number> = {
@@ -103,92 +101,66 @@ function computePct24(candles: Candle[]): number {
   return prior > 0 ? ((current - prior) / prior) * 100 : 0;
 }
 
-/* ─── Signal → Intent ─────────────────────────────────────────────────────
- * Maps our IndicatorSignal to the existing coinlegs dispatch pipeline.
- * Uses the same tradeIntents schema, scoring, SMC validator, and dispatch. */
+/* ─── Signal → UnifiedSignal → Shared Dispatcher ─────────────────────
+ * Builds a proper UnifiedSignal and routes through the analysis
+ * dispatcher's dispatchSignal(), which handles:
+ *   idempotency → SMC validation → analysisSignals → TradeIntent → execution jobs
+ * This is the same path used by the ICR analysis engine. */
 
-async function dispatchSignal(sig: IndicatorSignal, confluenceCount: number): Promise<number | null> {
+async function dispatchViaUnifiedSignal(sig: IndicatorSignal, confluenceCount: number): Promise<number | null> {
+  const { score, tier } = scoreSignal(confluenceCount, sig.period, sig.indicator, 0);
+
+  if (tier !== "A") return null;
+
+  // Unified ATR-based SL/TP (shared ATR_PCT + RR constants)
+  const stopPct = (ATR_PCT[sig.period] || 1.5) * 1.5;
+  const stopLoss = sig.price > 0 ? parseFloat((sig.price * (1 - stopPct / 100)).toFixed(8)) : 0;
+  const takeProfit = sig.price > 0 ? parseFloat((sig.price * (1 + (stopPct * RR) / 100)).toFixed(8)) : 0;
+
+  // Check 24h gap via analysisSignals BEFORE calling the dispatcher
+  // (saves the cost of SMC validation + idempotency write on duplicates)
   const db = getDb();
-  const pct24 = 0; // computed from klines if needed but SMC validator handles absence
-
-  const { score, tier } = scoreSignal(confluenceCount, sig.period, sig.indicator, pct24);
-
-  // Tier A only for auto-dispatch (same gate as coinlegs scraper)
-  if (tier === "A") {
-    const structural = validateStructure({
-      period: sig.period,
-      price: sig.price,
-      pct24,
-      maxProfit: 0,            // NOT used by the validator (gateDOL is structural)
-      maxProfitDuration: null,
-      indicatorName: sig.indicator,
-      confluenceCount,
-      marketName: sig.marketName,
-    });
-
-    if (!structural.pass) {
-      const failed = Object.values(structural.gates).filter(g => !g.pass).map(g => g.reason);
-      console.log(`[generator] SMC rejected ${sig.marketName} ${sig.period} ${sig.indicator}: ${failed.join(", ")}`);
-      return null;
-    }
-
-    const confidence = structuralConfidenceMultiplier(structural.score);
-
-    // Unified ATR-based SL/TP (shared ATR_PCT + RR from this file's top-level
-    // constants, matching engine.ts buildSignal and dispatcher.ts dispatchSignal)
-    const stopPct = (ATR_PCT[sig.period] || 1.5) * 1.5;
-    const stopPrice = sig.price > 0 ? (sig.price * (1 - stopPct / 100)).toFixed(8) : null;
-    const tpPrice = sig.price > 0 ? (sig.price * (1 + (stopPct * RR) / 100)).toFixed(8) : null;
-
-    // Build a UnifiedSignal-like object for the shared idempotency key format,
-    // so both pipelines share the same dedup namespace.
-    const dedupSignal = {
-      source: "anavitrade-native",
-      symbol: sig.marketName.replace("USDT", ""),
-      timeframe: sig.period,
-      direction: "long" as const,
-      timestamp: sig.signalTime,
-    };
-    const dedupKey = idempotencyKey(dedupSignal as any, sig.signalTime);
-
-    // 24h gap: skip if this (symbol, timeframe) had a dispatched signal recently
-    const gap24h = Date.now() - 24 * 60 * 60 * 1000;
-    const [recent] = await db.select()
-      .from(analysisSignals)
-      .where(and(
-        eq(analysisSignals.symbol, sig.marketName),
-        eq(analysisSignals.timeframe, sig.period),
-        eq(analysisSignals.dispatched, 1),
-        gte(analysisSignals.createdAt, gap24h),
-      ))
-      .limit(1);
-    if (recent) {
-      console.log(`[generator] 24h gap skipped ${sig.marketName} ${sig.period} ${sig.indicator}`);
-      return null;
-    }
-
-    const intent = await db.insert(tradeIntents).values({
-      source: "anavitrade-native",
-      externalSignalId: dedupKey,
-      symbol: sig.marketName.replace("USDT", ""),
-      side: "buy",
-      orderType: "market",
-      targetLeverage: sig.period === "4h" || sig.period === "2h" ? 3 : 2,
-      limitPrice: sig.price > 0 ? String(sig.price) : null,
-      stopLossPrice: stopPrice,
-      takeProfitPrice: tpPrice,
-      status: "created",
-      createdBy: "native-generator",
-      requestedNotionalUsd: confidence < 1 ? String(Math.round(confidence * 100)) : null,
-    } as any).returning().then(r => r[0]);
-
-    if (intent) {
-      const result = await createExecutionJobsForIntent(intent.id);
-      return result.jobs.length;
-    }
+  const gap24h = Date.now() - 24 * 60 * 60 * 1000;
+  const [recent] = await db.select()
+    .from(analysisSignals)
+    .where(and(
+      eq(analysisSignals.symbol, sig.marketName),
+      eq(analysisSignals.timeframe, sig.period),
+      eq(analysisSignals.dispatched, 1),
+      gte(analysisSignals.createdAt, gap24h),
+    ))
+    .limit(1);
+  if (recent) {
+    console.log(`[generator] 24h gap skipped ${sig.marketName} ${sig.period} ${sig.indicator}`);
+    return null;
   }
 
-  return null;
+  const unifiedSignal: UnifiedSignal = {
+    source: "anavitrade-native",
+    symbol: sig.marketName.replace("USDT", ""),
+    timeframe: sig.period,
+    direction: "long",
+    entry: sig.price,
+    stopLoss,
+    takeProfit,
+    score,
+    tier,
+    thesis: `Native ${sig.indicator} ${sig.period} ${sig.marketName}`,
+    components: { confluence: confluenceCount, indicatorScore: score },
+    structuralScore: 50,
+    confidence: 0.5,
+    timestamp: sig.signalTime,
+    metadata: { indicatorName: sig.indicator, ...sig.metadata },
+  };
+
+  const result = await dispatchSignal(unifiedSignal);
+
+  if (result.error) {
+    console.warn(`[generator] dispatch failed for ${sig.marketName} ${sig.period}: ${result.error}`);
+    return null;
+  }
+
+  return result.intentId !== null ? 1 : 0;
 }
 
 /* ─── Main Entry Point ────────────────────────────────────────────────────
@@ -384,7 +356,7 @@ export async function generateSignals(): Promise<GeneratorResult> {
 
           if (tier === "A") {
             try {
-              const jobs = await dispatchSignal(sig, signals.length);
+              const jobs = await dispatchViaUnifiedSignal(sig, signals.length);
               if (jobs !== null) intentsCreated++;
             } catch (e: any) {
               console.warn(`[generator] dispatch error ${symbol} ${tf}: ${e?.message}`);

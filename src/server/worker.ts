@@ -506,8 +506,8 @@ export default {
    *
    * Job             | Interval    | Why
    * ----------------|-------------|----------------------
-   * Coinlegs scrape | every fire  | ~300ms API call
-   * Native generator| every fire  | ~500ms local detection
+   * Native generator| every fire  | ~500ms local detection — PRIMARY
+   * Coinlegs scrape | every fire  | ~300ms API call — SECONDARY
    * Demo sync       | every 5th   | DB batch (signals to demo accounts)
    * Analysis engine | every 5th   | ICR scoring + enrichment
    * Outcome val     | every 15th  | ~1s Binance kline API
@@ -518,6 +518,19 @@ export default {
     const _cronCount = await loadCronCount() + 1;
 
     const results: Record<string, unknown> = {};
+
+    // Native signal generator (every trigger — PRIMARY)
+    try {
+      const nativeResult = await generateSignals();
+      console.log("[native-cron]", JSON.stringify({
+        pairs: nativeResult.pairs, signals: nativeResult.signalsDetected,
+        tierA: nativeResult.tierA, intents: nativeResult.intentsCreated,
+      }));
+      results.native = nativeResult;
+    } catch (e: any) {
+      console.warn("[native-cron] error:", e?.message);
+      results.native = { error: e?.message };
+    }
 
     // Coinlegs scraper (every trigger — secondary)
     try {
@@ -530,20 +543,7 @@ export default {
       results.scraper = scraperResult;
     } catch (e: any) {
       console.warn("[coinlegs-cron] error:", e?.message);
-      // Non-fatal — native generator will handle this cycle
-    }
-
-    // Native signal generator (every trigger — primary)
-    try {
-      const nativeResult = await generateSignals();
-      console.log("[native-cron]", JSON.stringify({
-        pairs: nativeResult.pairs, signals: nativeResult.signalsDetected,
-        tierA: nativeResult.tierA, intents: nativeResult.intentsCreated,
-      }));
-      results.native = nativeResult;
-    } catch (e: any) {
-      console.warn("[native-cron] error:", e?.message);
-      results.native = { error: e?.message };
+      // Non-fatal — native generator already ran
     }
 
     // Demo sync -- signals to demo accounts every 5th fire (~5 min)

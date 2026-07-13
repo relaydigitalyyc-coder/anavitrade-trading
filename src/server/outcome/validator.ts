@@ -116,7 +116,7 @@ export async function validateSignalOutcomes(): Promise<OutcomeValidationSummary
       and(
         eq(coinlegsSignals.outcomeValidated, 0),
         eq(coinlegsSignals.signal, 1),
-        sql`${coinlegsSignals.scrapedAt} <= ${cutoff}`,
+        lte(coinlegsSignals.scrapedAt, cutoff as any),
       ),
     )
     .limit(50) // batch size for cron safety
