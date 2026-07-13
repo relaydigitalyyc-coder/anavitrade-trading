@@ -434,6 +434,38 @@ export const klinesSymbolTfOpenTimeIdx = uniqueIndex("klines_symbol_tf_opentime_
 export const klinesSymbolTfIdx = index("klines_symbol_tf_idx")
   .on(klines.symbol, klines.timeframe);
 
+/* ─── Detector Signals ────────────────────────────────────────────────
+ * Research table for the corpus builder. Stores every detection module's
+ * output per candle. NOT queried by the live Worker — purely for offline
+ * ML training and backtest analysis. Unique per (symbol, timeframe,
+ * openTime, detectorName) so re-running the corpus builder is idempotent. */
+
+export const detectorSignals = sqliteTable("detector_signals", {
+  id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+  symbol: text().notNull(),
+  timeframe: text().notNull(),
+  openTime: integer({ mode: "number" }).notNull(),
+  detectorName: text().notNull(),
+  signal: integer({ mode: "number" }).notNull(),    // 1=buy, -1=sell, 0=neutral
+  direction: text(),                                  // "long" | "short"
+  confidence: integer({ mode: "number" }),            // 0-100
+  score: integer({ mode: "number" }),                 // detector-specific
+  metadataJson: text(),                               // full detector output
+  tier: text(),                                       // "A" | "B" | "C" | null
+  entryPrice: text(),
+  stopLoss: text(),
+  takeProfit: text(),
+  exitSimR: text(),                                   // simulated R from smart exit
+  exitReason: text(),                                 // "stop" | "trail" | "tp" | "time"
+  createdAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
+});
+
+export const detectorSignalsSymTfTimeDetectorIdx = uniqueIndex("detector_signals_sym_tf_time_detector_idx")
+  .on(detectorSignals.symbol, detectorSignals.timeframe, detectorSignals.openTime, detectorSignals.detectorName);
+
+export type DetectorSignal = typeof detectorSignals.$inferSelect;
+export type InsertDetectorSignal = typeof detectorSignals.$inferInsert;
+
 export const derivativesSnapshots = sqliteTable("derivatives_snapshots", {
   id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
   symbol: text().notNull(),
