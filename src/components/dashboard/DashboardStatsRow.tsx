@@ -81,31 +81,50 @@ export default function DashboardStatsRow({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.07, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-          className="p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden"
-          style={stat.gold ? {
-            background: "linear-gradient(145deg, oklch(0.12 0.022 250 / 0.90), oklch(0.09 0.018 255 / 0.95))",
-            borderColor: "oklch(0.82 0.16 85 / 0.30)",
-            boxShadow: "0 0 0 1px oklch(0.82 0.16 85 / 0.10) inset, 0 0 30px oklch(0.82 0.16 85 / 0.10)",
-            backdropFilter: "blur(16px)",
-          } : stat.azure ? {
-            background: "linear-gradient(145deg, oklch(0.12 0.022 250 / 0.90), oklch(0.09 0.018 255 / 0.95))",
-            borderColor: "oklch(0.60 0.22 220 / 0.25)",
-            boxShadow: "0 0 0 1px oklch(0.60 0.22 220 / 0.08) inset, 0 0 30px oklch(0.60 0.22 220 / 0.06)",
-            backdropFilter: "blur(16px)",
-          } : {
-            background: "linear-gradient(145deg, oklch(0.11 0.020 250 / 0.85), oklch(0.08 0.016 255 / 0.90))",
-            borderColor: "oklch(0.60 0.22 220 / 0.12)",
-            backdropFilter: "blur(12px)",
-          }}
+          className="relative group"
         >
-          {stat.azure && <div className="absolute top-0 left-0 right-0 h-px" style={{ background: "linear-gradient(to right, transparent, oklch(0.60 0.22 220 / 0.40), transparent)" }} />}
-          {stat.gold && <div className="absolute top-0 left-0 right-0 h-px" style={{ background: "linear-gradient(to right, transparent, oklch(0.82 0.16 85 / 0.50), transparent)" }} />}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-muted-foreground font-medium">{stat.label}</span>
-            <div style={stat.gold ? { color: "oklch(0.82 0.16 85)" } : stat.azure ? { color: "oklch(0.68 0.22 220)" } : { color: "oklch(0.50 0.015 260)" }}>{stat.icon}</div>
+          <div className={`
+            relative p-5 rounded-2xl border transition-all duration-300
+            hover:scale-[1.02] hover:shadow-lg
+            ${stat.gold
+              ? "border-gold-30 bg-gradient-to-br from-gold-10 to-card shadow-gold-10/20"
+              : stat.azure
+                ? "border-primary/25 bg-gradient-to-br from-card to-card/80 shadow-primary/10"
+                : "border-border/50 bg-card hover:border-border/80"
+            }
+          `}>
+            {/* Top glow line */}
+            {(stat.azure || stat.gold) && (
+              <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-40"
+                style={{ color: stat.gold ? "oklch(0.82 0.16 85)" : "oklch(0.60 0.22 220)" }}
+              />
+            )}
+
+            {/* Icon */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-muted-foreground font-medium tracking-wide uppercase">{stat.label}</span>
+              <div className={`
+                w-8 h-8 rounded-xl flex items-center justify-center
+                ${stat.gold ? "bg-gold-10/20 text-gold" : stat.azure ? "bg-primary/10 text-primary" : "bg-muted/30 text-muted-foreground"}
+              `}>
+                {stat.icon}
+              </div>
+            </div>
+
+            {/* Value */}
+            <div className={`
+              text-2xl font-heading font-bold tracking-tight mb-0.5
+              ${stat.gold ? "text-gold" : "text-foreground"}
+            `}>
+              {stat.value}
+            </div>
+
+            {/* Sub label */}
+            <div className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 inline-block" />
+              {stat.sub}
+            </div>
           </div>
-          <div className={`text-xl font-heading font-bold mb-0.5 ${stat.gold ? "gold-shimmer-text" : "text-foreground"}`}>{stat.value}</div>
-          <div className="text-xs text-muted-foreground">{stat.sub}</div>
         </motion.div>
       ))}
     </div>

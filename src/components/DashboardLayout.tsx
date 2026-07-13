@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +22,11 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
+import { cn } from "@/lib/utils";
 import { LayoutDashboard, LogOut, PanelLeft, BarChart3, Settings, Zap, Shield } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
-import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -42,8 +43,12 @@ const MAX_WIDTH = 480;
 
 export default function DashboardLayout({
   children,
+  variant = "default",
+  headerActions,
 }: {
   children: React.ReactNode;
+  variant?: "default" | "onboarding";
+  headerActions?: React.ReactNode;
 }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
@@ -99,7 +104,7 @@ export default function DashboardLayout({
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+      <DashboardLayoutContent variant={variant} headerActions={headerActions} setSidebarWidth={setSidebarWidth}>
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
@@ -108,11 +113,15 @@ export default function DashboardLayout({
 
 type DashboardLayoutContentProps = {
   children: React.ReactNode;
+  variant: "default" | "onboarding";
+  headerActions?: React.ReactNode;
   setSidebarWidth: (width: number) => void;
 };
 
 function DashboardLayoutContent({
   children,
+  variant,
+  headerActions,
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
@@ -168,8 +177,8 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
+          <SidebarHeader className="h-16 justify-center border-b border-border/30">
+            <div className="flex items-center gap-3 px-3 transition-all w-full">
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
@@ -178,9 +187,12 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                <div className="flex items-center gap-2 min-w-0"
+                  style={{ background: "linear-gradient(135deg, oklch(0.60 0.22 220), oklch(0.45 0.18 240))",
+                    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
+                >
+                  <span className="font-heading font-bold text-base tracking-tight">
+                    Anavitrade
                   </span>
                 </div>
               ) : null}
@@ -252,21 +264,51 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
+        {/* Mobile header */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
+                <span className="tracking-tight text-foreground text-sm font-medium">
+                  {activeMenuItem?.label ?? "Menu"}
+                </span>
+              </div>
+            </div>
+            {headerActions && (
+              <div className="flex items-center gap-2 pr-2">
+                {headerActions}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Desktop header */}
+        {!isMobile && headerActions && variant === "default" && (
+          <div className="sticky top-0 z-40 border-b backdrop-blur-2xl"
+            style={{ borderColor: "oklch(0.60 0.22 220 / 0.12)", background: "oklch(0.07 0.015 255 / 0.85)" }}
+          >
+            <div className="flex items-center justify-between px-6 py-3.5">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="h-8 w-8 rounded-lg hover:bg-accent" />
+                <div className="w-px h-5 bg-border/50" />
+                <h2 className="text-sm font-semibold text-foreground tracking-tight">
+                  {activeMenuItem?.label ?? "Dashboard"}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {headerActions}
               </div>
             </div>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+
+        <main className={cn(
+          "flex-1",
+          variant === "default" ? "p-6" : "p-0"
+        )}>
+          {children}
+        </main>
       </SidebarInset>
     </>
   );

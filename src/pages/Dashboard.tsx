@@ -12,7 +12,7 @@ import { useDemoData } from "@/hooks/useDemoData";
 import { useSignalFeed } from "@/hooks/useSignalFeed";
 
 // Extracted components
-import TopNavBar from "@/components/dashboard/TopNavBar";
+import DashboardLayout from "@/components/DashboardLayout";
 import ActivationCard from "@/components/dashboard/ActivationCard";
 import DashboardStatsRow from "@/components/dashboard/DashboardStatsRow";
 import PortfolioChartPanel from "@/components/dashboard/PortfolioChartPanel";
@@ -63,7 +63,7 @@ function isWinner(signal: number, pct: number | null): boolean {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const {
     anyConnected, asterConnected, asterPending, web3Connected, web3Session,
@@ -120,19 +120,48 @@ export default function Dashboard() {
   const rankMedals = ["🥇", "🥈", "🥉"];
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNavBar
-        currentMode={currentMode}
-        isDemoMode={isDemoMode}
-        statusColor={statusColor}
-        dotColor={dotColor}
-        statusLabel={statusLabel}
-        onSetLive={() => { if (currentMode !== "live") setDisplayMode.mutate({ mode: "live" }); }}
-        onSetDemo={() => { if (currentMode !== "demo") setDisplayMode.mutate({ mode: "demo" }); }}
-        onLogout={() => { logout(); navigate("/"); }}
-      />
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <DashboardLayout
+      headerActions={
+        <div className="flex items-center gap-2">
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-0.5 p-0.5 rounded-lg border"
+            style={{ borderColor: "oklch(0.60 0.22 220 / 0.15)", background: "oklch(0.08 0.012 260 / 0.5)" }}
+          >
+            <button
+              onClick={() => { if (currentMode !== "live") setDisplayMode.mutate({ mode: "live" }); }}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${currentMode === "live" ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Live
+            </button>
+            <button
+              onClick={() => { if (currentMode !== "demo") setDisplayMode.mutate({ mode: "demo" }); }}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${isDemoMode ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Demo
+            </button>
+          </div>
+          <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${statusColor}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+            {statusLabel}
+          </div>
+          {anyConnected && (
+            <button
+              onClick={handleKillSwitch}
+              disabled={false}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 ${
+                killActive
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
+              }`}
+            >
+              {killActive ? <Zap className="w-3.5 h-3.5" /> : <ZapOff className="w-3.5 h-3.5" />}
+              {killActive ? "Resume" : "Kill"}
+            </button>
+          )}
+        </div>
+      }
+    >
+      <div className="max-w-7xl mx-auto">
         {/* Welcome row */}
         <div className="flex items-start justify-between mb-8">
           <div>
@@ -143,20 +172,6 @@ export default function Dashboard() {
               {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </p>
           </div>
-          {anyConnected && (
-            <button
-              onClick={handleKillSwitch}
-              disabled={false}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 ${
-                killActive
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
-                  : "bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
-              }`}
-            >
-              {killActive ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
-              {killActive ? "Resume Trading" : "Kill Switch"}
-            </button>
-          )}
         </div>
 
         {/* Inline Aster Activation */}
@@ -305,6 +320,6 @@ export default function Dashboard() {
         onClose={() => setShowWalletModal(false)}
         onConnected={() => { refetchWeb3(); }}
       />
-    </div>
+    </DashboardLayout>
   );
 }

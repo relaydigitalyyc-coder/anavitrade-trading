@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import {
@@ -9,11 +9,11 @@ import {
   Shield,
   Zap,
   ExternalLink,
-  ArrowLeft,
   Sparkles,
 } from "lucide-react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
+import DashboardLayout from "@/components/DashboardLayout";
 import WalletConnectModal from "@/components/WalletConnectModal";
 
 /* ─── ONE-CLICK ASTER ACTIVATION ───
@@ -60,22 +60,8 @@ export default function AsterOnboarding() {
   }, [walletAddress, showWalletModal]);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Back nav */}
-      <div className="border-b px-6 py-4" style={{ borderColor: "oklch(0.60 0.22 220 / 0.12)" }}>
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <Link href="/dashboard">
-            <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="w-4 h-4" /> Dashboard
-            </button>
-          </Link>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Zap className="w-4 h-4 text-primary" /> Aster DEX
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto px-6 py-16">
+    <DashboardLayout variant="onboarding">
+      <div className="max-w-lg mx-auto px-6 py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -234,6 +220,6 @@ export default function AsterOnboarding() {
           utils.web3Wallet.getSession.invalidate();
         }}
       />
-    </div>
+    </DashboardLayout>
   );
 }

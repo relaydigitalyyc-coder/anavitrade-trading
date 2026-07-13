@@ -21,9 +21,7 @@ export default function PortfolioChartPanel({
   demoStartingCapital, totalPnl, pnlPct, syncPending, onSync,
 }: PortfolioChartPanelProps) {
   return (
-    <div className="lg:col-span-2 p-6 rounded-2xl border relative overflow-hidden"
-      style={{ background: "linear-gradient(145deg, oklch(0.12 0.022 250 / 0.90), oklch(0.09 0.018 255 / 0.95))", borderColor: "oklch(0.60 0.22 220 / 0.18)", backdropFilter: "blur(16px)" }}
-    >
+    <div className="lg:col-span-2 glass-card rounded-2xl p-6 relative overflow-hidden">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-sm font-semibold text-foreground">{isDemoMode ? "Demo Portfolio Growth" : "Portfolio Growth"}</h3>

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
-  Shield, Lock, Eye, Zap, CheckCircle2, ChevronRight, ChevronLeft,
-  HardDrive, Cpu, AlertTriangle, ArrowRight, Wifi, XCircle,
+  Shield, Lock, Zap, CheckCircle2, ChevronRight, ChevronLeft,
+  HardDrive, Cpu, ArrowRight, Wifi, XCircle,
   TrendingUp, RefreshCw, Server, Smartphone
 } from "lucide-react";
+import DashboardLayout from "@/components/DashboardLayout";
 import WalletConnectModal from "@/components/WalletConnectModal";
 
 const steps = [
@@ -87,25 +88,8 @@ export default function LedgerOnboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground" style={{
-      background: "radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.60 0.22 220 /  0.06) 0%, transparent 60%), oklch(0.07 0.015 255)"
-    }}>
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <Link href="/">
-          <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-black text-sm"
-              style={{ background: "linear-gradient(135deg, oklch(0.60 0.22 220), oklch(0.52 0.22 225))" }}>@</div>
-            <span className="text-white font-semibold text-sm">Anavitrade</span>
-          </div>
-        </Link>
-        <div className="flex items-center gap-2 text-xs text-white/30">
-          <Lock className="w-3 h-3" />
-          <span>256-bit encrypted · Non-custodial</span>
-        </div>
-      </nav>
-
-      <div className="max-w-2xl mx-auto px-6 py-12">
+    <DashboardLayout variant="onboarding">
+      <div className="max-w-2xl mx-auto px-6 py-4">
         {/* Progress bar */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
@@ -497,6 +481,6 @@ export default function LedgerOnboarding() {
         onClose={() => setWalletModalOpen(false)}
         onConnected={handleWalletConnected}
       />
-    </div>
+    </DashboardLayout>
   );
 }

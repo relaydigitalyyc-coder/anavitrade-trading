@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   User, Shield, Key, AlertTriangle, CheckCircle2,
-  HardDrive, ExternalLink, LogOut, ArrowLeft, Eye, EyeOff, Zap, ZapOff
+  HardDrive, ExternalLink, Eye, EyeOff, Zap, ZapOff
 } from "lucide-react";
 import { toast } from "sonner";
+import DashboardLayout from "@/components/DashboardLayout";
 
 type Tab = "profile" | "security" | "wallet" | "web3" | "risk";
 
@@ -25,34 +26,8 @@ export default function AccountSettings() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border/50 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm">
-                <ArrowLeft className="w-4 h-4" /> Dashboard
-              </button>
-            </Link>
-            <div className="w-px h-4 bg-border" />
-            <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center font-bold text-primary-foreground text-sm">@</div>
-                <span className="font-heading font-bold text-foreground text-sm">Anavitrade</span>
-              </div>
-            </Link>
-          </div>
-          <button
-            onClick={() => { logout(); navigate("/"); }}
-            className="flex items-center gap-2 text-muted-foreground hover:text-red-400 transition-colors text-sm"
-          >
-            <LogOut className="w-4 h-4" /> Sign out
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-10">
+    <DashboardLayout>
+      <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-heading font-bold text-foreground">Account Settings</h1>
           <p className="text-muted-foreground text-sm mt-1">{user?.email}</p>
@@ -95,7 +70,7 @@ export default function AccountSettings() {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 

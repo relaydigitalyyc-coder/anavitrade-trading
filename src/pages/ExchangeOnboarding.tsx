@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, KeyRound, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import Wordmark from "@/components/Wordmark";
+import DashboardLayout from "@/components/DashboardLayout";
 import ExchangePicker, { type ExchangeOption } from "@/components/ExchangePicker";
 
 type Step = 1 | 2 | 3;
@@ -43,16 +43,7 @@ export default function ExchangeOnboarding() {
     (!meta?.needsPassphrase || passphrase.trim().length > 0) && attest;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <nav className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: "oklch(1 0 0 / 0.06)" }}>
-        <Wordmark size="sm" />
-        <div className="flex items-center gap-2 text-[0.72rem]" style={{ color: "oklch(0.6 0.02 240)" }}>
-          <Lock className="w-3.5 h-3.5" style={{ color: "oklch(0.72 0.20 195)" }} />
-          256-bit encrypted · Trade-only
-        </div>
-      </nav>
-
+    <DashboardLayout variant="onboarding">
       <div className="max-w-2xl mx-auto px-6 py-10">
         {/* Progress */}
         <div className="flex items-center gap-2 mb-10">
@@ -205,6 +196,6 @@ export default function ExchangeOnboarding() {
           <Link href="/dashboard" className="text-xs hover:underline" style={{ color: "oklch(0.5 0.02 240)" }}>Skip for now</Link>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
