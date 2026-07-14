@@ -53,3 +53,10 @@
 - [x] Updated Aster dashboard copy to show staging mode and documented the env flag.
 - [x] Verified `npx tsc --noEmit && npx tsc --noEmit -p src/server/tsconfig.json`.
 - [x] Verified `npx vite build` passes with existing non-blocking Rollup `ox` warnings.
+
+### Production Follow-Up Checks
+1. Keep `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=false` until request signing, order payload, and fill sync are verified end-to-end.
+2. Test Aster request signing against testnet or a non-production wallet before any production wallet path.
+3. Confirm submitted/filled/rejected order lifecycle rows populate `execution_jobs`, `order_events`, and audit logs correctly.
+4. Confirm NAV snapshots reconcile with live Aster fills before fee crystallization consumes them.
+5. Re-run `pnpm check && npx vite build` before any push or deployment touching this path.

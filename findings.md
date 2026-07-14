@@ -1,48 +1,47 @@
 # Findings & Decisions
 
-## 2026-07-12 Production Pipeline Blockers
+## Beta State (2026-07-14) — Live at anavitrade-trading.erhazeariel.workers.dev
 
-### 1. D1 Date Serialization (PARTIALLY FIXED)
-**Root cause:** Drizzle ORM's `integer({ mode: "timestamp_ms" })` converts epoch-ms to Date objects → ISO strings → D1 `INTEGER` columns reject ISO strings with `D1_TYPE_ERROR: Type 'object' not supported`.
+### Working in Production ✅
+- Coinlegs scraper: ~1,400 signals, cron inserts every 60s
+- 8 CEX exchange clients (Binance, Bitunix, Bybit, OKX, Kraken, KuCoin, Gate.io, Coinbase)
+- CEX connection management with encrypted key storage
+- Aster DEX activation flow (EIP-712 signing via viem)
+- Dashboard: 9 components, 3 hooks, 1285→220 lines
+- Unified balance aggregation (DEX + CEX sum)
+- tRPC API: 24 endpoints covering auth, live, demo, signals, exec, CEX, Aster
+- REST API: 18 admin endpoints for backtest, analysis, mirror, scraper, fee
+- Outcome validator: tracks 1,400+ signals for claimed-vs-actual accuracy
+- Fee engine: 2&20 model, quarterly periods, NAV-snapshot based
+- Auth header bypass: Binance 451 geo-block solved with X-MBX-APIKEY
+- D1 Date serialization: fixed with raw D1 binding + `number` mode
+- D1 100-variable limit: fixed with chunked inArray (80 IDs per query)
+- Cron throttle: D1-persisted counter survives Worker restarts
+- SMC dispatch: active, validates Tier-A signals before TradeIntent creation
+- analysis_signals bridge: re-enabled, raw D1 insert bypasses Date bug
 
-**Fix applied:** Changed `coinlegs_signals` columns (`signalDate`, `recordDate`, `scrapedAt`) to `integer({ mode: "number" })`. For SELECT queries use `gte(col, val as any)`. For INSERT use raw D1 binding: `getRawD1().prepare(sql).bind(...vals).run()`.
+### Blocked by Cloudflare 50-Subrequest Cap 🟡
+- Analysis engine: completes with status="completed" but klines table empty
+- Klines insert: 500-row batch exceeds D1 999-variable limit
+- Max per analysis run: ~15 pairs under 50-subrequest cap (1 fetch + 1 insert each)
+- Signal spotting API and kline warehouse require VPS upgrade
 
-**Still broken:** The scraper's confluence SELECT still uses `new Date()` in a `sql` template (line 238). Need `Date.now()` instead. See `grep -n "new Date(" src/server/coinlegs-scraper.ts`.
+### Known Production Gaps
+- **Error reporting:** No Sentry/DataDog
+- **Fee collection:** Engine tracks but no payment provider integration
+- **Alerting:** No Slack/webhook for cron failures
+- **Live order execution:** Needs static egress IP for exchange whitelisting
+- **Analysis engine:** 0 signals until klines table is populated
 
-### 2. D1 100-Variable Limit (FIXED)
-`inArray(coinlegsSignals.signalId, [...120+ IDs])` hit D1's statement variable limit. Fixed by chunking to 80 IDs per query.
+### Aster Live Submission Gate
+- Keep `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=false` until Aster request signing, exact order payload fields, and fill sync are verified end-to-end.
+- Before enabling live submission, verify staged/submitted/filled/rejected transitions in `execution_jobs`, `order_events`, audit logs, and NAV snapshots.
+- Use testnet or a non-production wallet first; do not depend on fee crystallization from Aster fills until NAV reconciliation is proven.
 
-### 3. Cron Counter Durability (FIXED)
-In-memory `_cronCount` reset on Worker restarts. Now persisted to `global_settings` table via `loadCronCount()`/`saveCronCount()`.
-
-### 4. analysis_signals Bridge (PENDING)
-Disabled in scraper — `analysis_signals` table still uses `timestamp_ms` columns. Fix: change to `number` mode.
-
-### 5. Known Production Gaps
-- **Error reporting:** No Sentry/DataDog integration. Errors silently caught.
-- **Fee collection:** Engine tracks 2&20 but no payment provider integration.
-- **Alerting:** No webhook/slack for cron failure notification.
-- **Wrangler version:** v3.114 (v4 available: `npm i --save-dev wrangler@4`)
-- **Secrets:** `ENCRYPTION_KEY` and `JWT_SECRET` both dev values locally. Must be different in prod.
-
-## 2026-07-13 UI Upgrade Production Caveats Audit
-
-Canonical note for agents: `docs/ops/2026-07-13-ui-prod-caveats-audit.md`.
-
-Key findings:
-- Production frontend API routing is hard-coded through `src/config.ts` to the Cloudflare Worker origin; use env-based routing before relying on previews, staging, or custom domains.
-- Worker CORS currently allows localhost and the main Vercel app origin only; preview/custom origins need deliberate handling for credentialed tRPC calls.
-- Authenticated dashboard QA remains a gap even though `npx tsc --noEmit`, `npx vite build`, `pnpm run check`, and public/login responsive smoke checks passed.
-- `MarketTickerRail` still includes curated fallback market items and must not be described as exchange-authoritative real-time price data until wired to a live source.
-- Root providers and third-party embeds remain production performance/resilience risks: Wagmi/wallet/chart/motion chunks need continued bundle audits, and TradingView iframes need graceful runtime fallbacks.
-
-## 2026-07-13 Aster Execution Failed State
-
-Root cause:
-- Aster activation/dispatch paths wrote `Date` objects through Drizzle into D1 integer timestamp columns, matching the known D1 serialization failure mode.
-- Aster dispatch attempted live REST order submission even though the architecture doc says live Aster order submission must remain gated until payload signing and fill sync are verified.
-
-Fix:
-- Aster account and execution/NAV timestamp fields now use epoch milliseconds.
-- Aster dispatch stages jobs with status `staged` while `ASTER_LIVE_ORDER_SUBMISSION_ENABLED` is not `"true"`, instead of retrying an unverified provider call and marking jobs `error`.
-- The dashboard Aster panel now labels the mode as "Staging mode" unless live submit is explicitly enabled.
+### Next Steps (When Infrastructure Upgrades)
+- Apply PRDs in `docs/plans/2026-07-14-*-prd.md`
+- Deploy VPS with Node.js backend and static egress IP
+- Phase 1: Seed klines (1-2 hours)
+- Phase 2: Backtest parameter sweep (4-8 hours)
+- Phase 3: Signal spotting API
+- Phase 4: Dynamic watchlist from signal activity
