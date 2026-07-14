@@ -2,7 +2,27 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getAsterConfig } from "./config";
-import { getAsterAgentStatus, prepareAsterAgent, recordAsterApprovals, revokeAsterAgent, activateAsterWithWallet } from "./store";
+import {
+  completeAsterRegistration,
+  getAsterAgentStatus,
+  prepareAsterAgent,
+  prepareAsterRegistration,
+  recordAsterApprovals,
+  revokeAsterAgent,
+} from "./store";
+
+const registrationParamsSchema = z.object({
+  user: z.string().min(10).max(100),
+  nonce: z.string().regex(/^\d+$/),
+  agentName: z.string().min(1).max(64),
+  agentAddress: z.string().min(10).max(100),
+  expired: z.string().regex(/^\d+$/),
+  signatureChainId: z.literal("56"),
+  canSpotTrade: z.enum(["true", "false"]),
+  canPerpTrade: z.enum(["true", "false"]),
+  canWithdraw: z.enum(["true", "false"]),
+  ipWhitelist: z.string().max(512),
+});
 
 export const asterRouter = router({
   getConfig: protectedProcedure.query(() => {
@@ -55,13 +75,10 @@ export const asterRouter = router({
 
   revokeAgent: protectedProcedure.mutation(async ({ ctx }) => revokeAsterAgent(ctx.user.id)),
 
-  /* ── One-click activation ──
-     Uses the user's already-connected web3 wallet (no address input needed).
-     See store.ts for the security rationale. */
-  activateWithWallet: protectedProcedure
+  prepareRegistration: protectedProcedure
     .mutation(async ({ ctx }) => {
       try {
-        return await activateAsterWithWallet({ userId: ctx.user.id });
+        return await prepareAsterRegistration({ userId: ctx.user.id });
       } catch (e: any) {
         if (e?.message === "NO_WALLET_CONNECTED") {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No wallet connected. Connect a wallet first." });
@@ -69,7 +86,26 @@ export const asterRouter = router({
         if (e?.message === "ASTER_BUILDER_ADDRESS_NOT_CONFIGURED") {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Aster builder address is not configured." });
         }
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to activate Aster." });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to prepare Aster registration." });
+      }
+    }),
+
+  completeRegistration: protectedProcedure
+    .input(z.object({
+      params: registrationParamsSchema,
+      signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await completeAsterRegistration({ userId: ctx.user.id, ...input });
+      } catch (e: any) {
+        if (String(e?.message ?? "").startsWith("ASTER_REGISTRATION_")) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: e.message });
+        }
+        if (String(e?.message ?? "").startsWith("ASTER_AGENT_REGISTRATION_REJECTED")) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: e.message });
+        }
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to register Aster agent." });
       }
     }),
 });

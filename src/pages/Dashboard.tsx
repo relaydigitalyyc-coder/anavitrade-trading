@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Sparkles, Zap, ZapOff } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
 
 // Extracted hooks
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -70,7 +68,7 @@ export default function Dashboard() {
     anyConnected, asterConnected, asterPending, web3Connected, web3Session,
     currentMode, isDemoMode, killActive, statusLabel, statusColor, dotColor,
     setDisplayMode, toggleWeb3Kill, handleKillSwitch,
-    revokeWeb3, refetch, refetchWeb3,
+    revokeWeb3, refetchWeb3,
   } = useDashboardData();
 
   const {
@@ -90,24 +88,6 @@ export default function Dashboard() {
   // Inline Aster Activation state
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showActivationPanel, setShowActivationPanel] = useState(false);
-  const activate = trpc.aster.activateWithWallet.useMutation({
-    onSuccess: () => {
-      toast.success("Aster execution activated!");
-      refetch();
-      setShowActivationPanel(false);
-    },
-    onError: (e) => toast.error(e.message || "Failed to activate Aster."),
-  });
-
-  // When a wallet is connected while the activation panel is open, auto-activate
-  useEffect(() => {
-    if (showActivationPanel && web3Connected && !activate.isPending && !asterConnected) {
-      if (web3Session?.walletAddress) {
-        activate.mutate();
-      }
-    }
-  }, [web3Connected, showActivationPanel, web3Session?.walletAddress, asterConnected, activate]);
-
   // First-run wizard
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
@@ -184,12 +164,12 @@ export default function Dashboard() {
           web3Connected={web3Connected}
           web3Session={web3Session}
           showActivationPanel={showActivationPanel}
-          activatePending={activate.isPending}
+          activatePending={false}
           hasWalletAddress={!!web3Session?.walletAddress}
           onShowPanel={() => setShowActivationPanel(true)}
           onHidePanel={() => setShowActivationPanel(false)}
           onConnectWallet={() => setShowWalletModal(true)}
-          onActivate={() => activate.mutate()}
+          onActivate={() => navigate("/onboarding/aster")}
           onShowWizard={() => setShowWizard(true)}
         />
 

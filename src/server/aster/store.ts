@@ -2,9 +2,15 @@ import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { asterAgentAccounts, liveAccounts } from "../../drizzle/schema";
 import { encryptKey, getDb, getOrCreateLiveAccount, getWeb3WalletSession, writeAuditLog } from "../db";
+import { AsterApiClient } from "./client";
 import { getAsterConfig } from "./config";
 import { createAsterAgentKeypair } from "./signing";
-import type { AsterAgentPermissions, AsterAgentStatusView } from "./types";
+import type {
+  AsterAgentPermissions,
+  AsterAgentRegistrationChallenge,
+  AsterAgentRegistrationParams,
+  AsterAgentStatusView,
+} from "./types";
 
 const DEFAULT_PERMISSIONS: AsterAgentPermissions = {
   perp: true,
@@ -28,6 +34,51 @@ function parsePermissions(raw: string | null): AsterAgentPermissions {
 function toEpochMs(value: Date | number | null | undefined): number | null {
   if (value == null) return null;
   return value instanceof Date ? value.getTime() : value;
+}
+
+let lastRegistrationNonce = 0;
+
+function nextRegistrationNonce(): string {
+  const candidate = Date.now() * 1000;
+  lastRegistrationNonce = candidate > lastRegistrationNonce ? candidate : lastRegistrationNonce + 1;
+  return String(lastRegistrationNonce);
+}
+
+function encodeParams(params: AsterAgentRegistrationParams): string {
+  return new URLSearchParams(params).toString();
+}
+
+function registrationChallenge(account: typeof asterAgentAccounts.$inferSelect): AsterAgentRegistrationChallenge {
+  const permissions = parsePermissions(account.permissionsJson);
+  const params: AsterAgentRegistrationParams = {
+    user: account.asterAccountAddress,
+    nonce: nextRegistrationNonce(),
+    agentName: "Anavitrade",
+    agentAddress: account.signerAddress,
+    expired: String(account.approvalExpiresAt ?? Date.now() + 30 * 24 * 60 * 60 * 1000),
+    signatureChainId: "56",
+    canSpotTrade: permissions.spot ? "true" : "false",
+    canPerpTrade: permissions.perp ? "true" : "false",
+    canWithdraw: "false",
+    ipWhitelist: Array.isArray(permissions.ipWhitelist) ? permissions.ipWhitelist.join(" ") : "",
+  };
+
+  return {
+    params,
+    typedData: {
+      domain: {
+        name: "AsterSignTransaction",
+        version: "1",
+        chainId: 56,
+        verifyingContract: "0x0000000000000000000000000000000000000000",
+      },
+      types: {
+        Message: [{ name: "msg", type: "string" }],
+      },
+      primaryType: "Message",
+      message: { msg: encodeParams(params) },
+    },
+  };
 }
 
 function statusView(account: typeof asterAgentAccounts.$inferSelect): AsterAgentStatusView {
@@ -110,6 +161,65 @@ export async function prepareAsterAgent(input: {
   return getAsterAgentStatus(input.userId);
 }
 
+export async function prepareAsterRegistration(input: {
+  userId: number;
+}): Promise<AsterAgentRegistrationChallenge> {
+  const session = await getWeb3WalletSession(input.userId);
+  if (!session) throw new Error("NO_WALLET_CONNECTED");
+  if (!session.walletAddress) throw new Error("WALLET_ADDRESS_MISSING");
+  if (session.killSwitchActive) throw new Error("WALLET_KILL_SWITCH_ACTIVE");
+
+  await prepareAsterAgent({
+    userId: input.userId,
+    asterAccountAddress: session.walletAddress.toLowerCase().trim(),
+    maxFeeRate: undefined,
+    approvalExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+  });
+
+  const db = getDb();
+  const [account] = await db.select().from(asterAgentAccounts)
+    .where(eq(asterAgentAccounts.userId, input.userId))
+    .orderBy(desc(asterAgentAccounts.createdAt))
+    .limit(1);
+  if (!account) throw new Error("ASTER_AGENT_NOT_FOUND");
+
+  return registrationChallenge(account);
+}
+
+export async function completeAsterRegistration(input: {
+  userId: number;
+  params: AsterAgentRegistrationParams;
+  signature: string;
+}) {
+  const db = getDb();
+  const [account] = await db.select().from(asterAgentAccounts)
+    .where(eq(asterAgentAccounts.userId, input.userId))
+    .orderBy(desc(asterAgentAccounts.createdAt))
+    .limit(1);
+  if (!account) throw new Error("ASTER_AGENT_NOT_FOUND");
+  if (account.status !== "pending_approval") throw new Error("ASTER_AGENT_NOT_PENDING");
+  if (normalizeAddress(input.params.user) !== normalizeAddress(account.asterAccountAddress)) {
+    throw new Error("ASTER_REGISTRATION_USER_MISMATCH");
+  }
+  if (normalizeAddress(input.params.agentAddress) !== normalizeAddress(account.signerAddress)) {
+    throw new Error("ASTER_REGISTRATION_AGENT_MISMATCH");
+  }
+  if (String(account.approvalExpiresAt ?? "") !== input.params.expired) {
+    throw new Error("ASTER_REGISTRATION_EXPIRY_MISMATCH");
+  }
+
+  const client = new AsterApiClient();
+  await client.registerAndApproveAgent(input.params, input.signature);
+  await recordAsterApprovals({
+    userId: input.userId,
+    agentApproved: true,
+    builderApproved: false,
+  });
+  await writeAuditLog(input.userId, "ASTER_AGENT_REGISTERED", `signer:${account.signerAddress}`);
+
+  return getAsterAgentStatus(input.userId);
+}
+
 export async function recordAsterApprovals(input: {
   userId: number;
   agentApproved: boolean;
@@ -123,7 +233,7 @@ export async function recordAsterApprovals(input: {
     .limit(1);
   if (!account) throw new Error("ASTER_AGENT_NOT_FOUND");
 
-  const active = input.agentApproved && input.builderApproved;
+  const active = input.agentApproved;
   const now = Date.now();
   await db.update(asterAgentAccounts)
     .set({

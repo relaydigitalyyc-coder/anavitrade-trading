@@ -55,13 +55,13 @@ Aster Builder `feeRate` is a per-order builder fee and must not be treated as th
 
 1. User connects wallet and enters/links Aster account.
 2. Backend creates one Agent signer for that user.
-3. User signs Aster `approveAgent`.
-4. User signs Aster `approveBuilder`.
-5. Backend marks the Aster account active only after both approvals are verified.
+3. User signs Aster Futures V3 `registerAndApproveAgent`.
+4. Backend submits the signed registration to Aster.
+5. Backend marks the Aster account active only after Aster accepts the Agent registration.
 6. Strategy emits `TradeIntent`.
 7. Risk engine creates one `ExecutionJob` per eligible user.
 8. Aster execution worker serializes jobs per signer.
-9. Worker submits Aster order with Builder address and fee rate.
+9. Worker sets leverage through `/fapi/v3/leverage` and submits orders through `/fapi/v3/order`.
 10. Fill sync records `order_events`, NAV snapshots, and fee accruals.
 
 ## Non-Negotiables
@@ -99,10 +99,10 @@ Implemented schema/migration:
 
 Implemented product surfaces:
 
-- `src/pages/AsterOnboarding.tsx` for Agent/Builder setup.
+- `src/pages/AsterOnboarding.tsx` for Agent registration.
 - `/onboarding/aster` protected route.
 - Dashboard Aster execution-readiness panel.
 - Settings Aster Agent management tab.
 - `.env.example` Aster configuration placeholders.
 
-Live order submission is intentionally gated. Keep `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=false` until Aster request signing, the exact order payload contract, and fill sync are wired and tested. Foundation-mode approval recording is user-confirmed; production must verify `approveAgent` and `approveBuilder` against Aster before activation.
+Live order submission is intentionally gated. Keep `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=false` in production until a non-production wallet proves Agent registration, leverage change, order placement, order query/fill sync, cancellation/cleanup, and NAV reconciliation end to end.

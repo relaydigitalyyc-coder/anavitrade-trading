@@ -37,6 +37,8 @@ export type AsterOrderRequest = {
   type: "MARKET" | "LIMIT";
   quantity: string;
   price?: string;
+  timeInForce?: "GTC" | "IOC" | "FOK" | "GTX";
+  newClientOrderId?: string;
   leverage?: number;
   builder: string;
   feeRate?: string;
@@ -52,4 +54,34 @@ export type ExecutionAdapterReceipt = {
 export type ExecutionAdapter = {
   submitOrder(jobId: number, request: AsterOrderRequest): Promise<ExecutionAdapterReceipt>;
   cancelOrder(orderId: string): Promise<ExecutionAdapterReceipt>;
+};
+
+export type AsterAgentRegistrationParams = {
+  user: string;
+  nonce: string;
+  agentName: string;
+  agentAddress: string;
+  expired: string;
+  signatureChainId: "56";
+  canSpotTrade: "true" | "false";
+  canPerpTrade: "true" | "false";
+  canWithdraw: "true" | "false";
+  ipWhitelist: string;
+};
+
+export type AsterAgentRegistrationChallenge = {
+  params: AsterAgentRegistrationParams;
+  typedData: {
+    domain: {
+      name: "AsterSignTransaction";
+      version: "1";
+      chainId: 56;
+      verifyingContract: "0x0000000000000000000000000000000000000000";
+    };
+    types: {
+      Message: Array<{ name: "msg"; type: "string" }>;
+    };
+    primaryType: "Message";
+    message: { msg: string };
+  };
 };

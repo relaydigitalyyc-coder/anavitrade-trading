@@ -140,6 +140,8 @@ async function fanOutCex(
           const receipt = await adapter.submitOrder(job.id, {
             symbol: intent.symbol, side: intent.side, type: intent.orderType,
             quantity, price: intent.limitPrice ?? undefined,
+            timeInForce: intent.orderType === "LIMIT" ? "GTC" : undefined,
+            newClientOrderId: idem,
             leverage: decision.leverage,
             stopLossPrice: intent.stopLossPrice ?? undefined,
             takeProfitPrice: intent.takeProfitPrice ?? undefined,

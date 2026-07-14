@@ -11,29 +11,27 @@ import {
   ExternalLink,
   Sparkles,
 } from "lucide-react";
-import { useAccount } from "wagmi";
+import { useAccount, useSignTypedData } from "wagmi";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import WalletConnectModal from "@/components/WalletConnectModal";
 
-/* ─── ONE-CLICK ASTER ACTIVATION ───
-   User connects their web3 wallet → clicks "Activate" →
-   platform handles everything (prepares agent, records approvals).
-   No copy-pasting, no navigating to Aster's website, no multi-step form. */
 export default function AsterOnboarding() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const { address: wagmiAddress, isConnected } = useAccount();
+  const { address: wagmiAddress } = useAccount();
+  const { signTypedDataAsync } = useSignTypedData();
   const { data: web3Session } = trpc.web3Wallet.getSession.useQuery();
   const { data: status, isLoading: statusLoading } = trpc.aster.getStatus.useQuery();
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [activated, setActivated] = useState(false);
 
-  const walletAddress = web3Session?.walletAddress ?? wagmiAddress ?? null;
+  const walletAddress = wagmiAddress ?? web3Session?.walletAddress ?? null;
   const isActive = status?.status === "active";
   const walletReady = !!walletAddress;
 
-  const activate = trpc.aster.activateWithWallet.useMutation({
+  const prepareRegistration = trpc.aster.prepareRegistration.useMutation();
+  const completeRegistration = trpc.aster.completeRegistration.useMutation({
     onSuccess: () => {
       setActivated(true);
       toast.success("Aster execution activated!");
@@ -44,12 +42,25 @@ export default function AsterOnboarding() {
     onError: (e) => toast.error(e.message || "Failed to activate Aster."),
   });
 
-  const handleActivate = () => {
-    if (!walletAddress) {
+  const handleActivate = async () => {
+    if (!wagmiAddress) {
       setShowWalletModal(true);
       return;
     }
-    activate.mutate();
+    try {
+      const challenge = await prepareRegistration.mutateAsync();
+      const typedData = {
+        ...challenge.typedData,
+        account: wagmiAddress as `0x${string}`,
+      } as unknown as Parameters<typeof signTypedDataAsync>[0];
+      const signature = await signTypedDataAsync(typedData);
+      await completeRegistration.mutateAsync({
+        params: challenge.params,
+        signature,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to activate Aster.");
+    }
   };
 
   // Auto-close wallet modal once connected
@@ -75,7 +86,7 @@ export default function AsterOnboarding() {
             One-click Aster Activation
           </h1>
           <p className="text-muted-foreground leading-relaxed max-w-sm mx-auto">
-            Connect your wallet and activate DEX execution in a single step. No copy-pasting, no multi-page forms.
+            Connect your wallet and approve an Aster Agent signer. Your wallet signs the official Aster registration message.
           </p>
         </motion.div>
 
@@ -137,7 +148,7 @@ export default function AsterOnboarding() {
               "Anavitrade generates a dedicated Agent signer for your account",
               "The Agent can place and cancel Aster perp orders only — no withdrawal access",
               "A 30-day approval is set (auto-renewable)",
-              "Your wallet address is registered as your Aster account",
+              "Your wallet signs Aster's register-and-approve Agent message",
               "Zero-custody — funds never leave your account",
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2.5">
@@ -150,10 +161,10 @@ export default function AsterOnboarding() {
           {/* CTA */}
           <button
             onClick={handleActivate}
-            disabled={activate.isPending || isActive || activated}
+            disabled={prepareRegistration.isPending || completeRegistration.isPending || isActive || activated}
             className="w-full h-12 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 relative overflow-hidden group font-heading"
             style={{
-              color: activate.isPending ? "var(--color-foreground)" : "var(--color-background)",
+              color: prepareRegistration.isPending || completeRegistration.isPending ? "var(--color-foreground)" : "var(--color-background)",
               background: isActive
                 ? "oklch(0.74 0.18 145 / 0.15)"
                 : "var(--grad-arctic)",
@@ -161,7 +172,7 @@ export default function AsterOnboarding() {
               border: isActive ? "1px solid oklch(0.74 0.18 145 / 0.3)" : "none",
             }}
           >
-            {activate.isPending ? (
+            {prepareRegistration.isPending || completeRegistration.isPending ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Activating...
@@ -179,14 +190,14 @@ export default function AsterOnboarding() {
             ) : (
               <span className="flex items-center justify-center gap-2 group-hover:gap-3 transition-all">
                 <Zap className="w-4 h-4" />
-                {walletReady ? "Activate Aster Execution" : "Connect Wallet & Activate"}
+                {walletReady ? "Sign & Activate Aster" : "Connect Wallet & Activate"}
               </span>
             )}
           </button>
 
           {!walletReady && (
             <p className="text-[11px] text-muted-foreground/60 text-center mt-3">
-              You'll be prompted to connect your wallet. Only a signature is requested — no transactions, no gas fees.
+              You'll be prompted to connect your wallet. Aster activation requires one wallet signature — no gas fees.
             </p>
           )}
         </motion.div>

@@ -38,6 +38,9 @@
 - Before enabling live submission, verify staged/submitted/filled/rejected transitions in `execution_jobs`, `order_events`, audit logs, and NAV snapshots.
 - Use testnet or a non-production wallet first; do not depend on fee crystallization from Aster fills until NAV reconciliation is proven.
 - 2026-07-14 follow-up: `execution_jobs`, `order_events`, and `nav_snapshots` are shared by Aster and CEX; CEX dispatch timestamp writes were audited and corrected to epoch milliseconds where they target numeric columns.
+- 2026-07-14 audit: the old Aster client was not live-order capable because it used `/fapi/v1/order`, JSON, and an order-shaped EIP-712 payload. It now uses Aster Futures V3 `/fapi/v3/order`, form-urlencoded params, microsecond nonce, and `AsterSignTransaction` signing.
+- 2026-07-14 audit: local-only Aster activation was unsafe. Activation now requires the connected wallet to sign Aster's official `registerAndApproveAgent` message and only marks the agent active after Aster accepts registration.
+- Remaining production proof: run a testnet or non-production wallet trade with `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=true`, then verify order status/fill sync/NAV reconciliation before enabling production live submission.
 
 ### Next Steps (When Infrastructure Upgrades)
 - Apply PRDs in `docs/plans/2026-07-14-*-prd.md`

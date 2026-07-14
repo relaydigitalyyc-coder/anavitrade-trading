@@ -33,12 +33,17 @@ export class AsterExecutionAdapter implements ExecutionAdapter {
       type: request.type ?? "MARKET",
       quantity: request.quantity,
       price: request.price,
+      timeInForce: request.timeInForce,
+      newClientOrderId: request.newClientOrderId,
       leverage: request.leverage ?? 1,
       builder: row.builderAddress,
       feeRate: row.feeRate ?? undefined,
     };
 
     const client = new AsterApiClient();
+    if (orderRequest.leverage !== undefined) {
+      await client.setLeverage(orderRequest.symbol, orderRequest.leverage, account);
+    }
     return client.submitOrder(orderRequest, account);
   }
 

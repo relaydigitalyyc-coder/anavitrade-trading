@@ -67,3 +67,19 @@
 - [x] Re-checked the merged Aster staging gate on `main` after remote docs churn.
 - [x] Found and fixed remaining CEX dispatch writes that still passed `Date` objects into numeric `execution_jobs` timestamp columns.
 - [x] Confirmed the remaining execution-folder `new Date()` write targets `global_settings`, which still uses Drizzle `timestamp_ms`.
+
+## Session: 2026-07-14 (Aster Integration Audit)
+
+### Done This Session
+- [x] Compared local Aster implementation against official Aster Futures API V3 docs.
+- [x] Replaced incompatible `/fapi/v1/order` JSON/order-struct signing with `/fapi/v3/order` form-urlencoded `AsterSignTransaction` signing.
+- [x] Added signed `/fapi/v3/leverage` call before order submission so requested leverage is applied through the supported endpoint.
+- [x] Replaced unsafe local-only activation with Aster `registerAndApproveAgent` wallet-signature flow.
+- [x] Verified public V3 connectivity to `https://fapi.asterdex.com/fapi/v3/ping` and `/time`.
+- [x] Ran a safe signed-order smoke with a throwaway signer; Aster returned `No agent found`, confirming the request reached Aster's signed auth path without risking a real trade.
+
+### Still Requires Non-Production Live Proof
+1. Connect a testnet or non-production funded Aster wallet.
+2. Complete `registerAndApproveAgent` through the app wallet-signature flow.
+3. Temporarily set `ASTER_LIVE_ORDER_SUBMISSION_ENABLED=true` outside production.
+4. Submit a tiny limit order, verify `execution_jobs`, `order_events`, order query/fill sync, NAV snapshot, and cancellation/cleanup.
