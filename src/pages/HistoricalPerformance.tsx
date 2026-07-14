@@ -153,7 +153,7 @@ export default function HistoricalPerformance() {
               variant="outline"
               className="border-primary/40 text-primary bg-primary/10 text-xs"
             >
-              Live data from coinlegs.com
+              Live market data
             </Badge>
           </div>
         </div>
@@ -464,7 +464,7 @@ export default function HistoricalPerformance() {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Data Source</p>
                     <p className="text-sm font-medium text-white">
-                      coinlegs.com · Aster-routable USDT
+                      Anavitrade Signals · Aster-routable USDT
                     </p>
                   </div>
                 </div>

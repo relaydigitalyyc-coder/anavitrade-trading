@@ -39,7 +39,7 @@ function fmtPrice(p: number): string {
   return p.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-/** Format a UTC timestamp string from coinlegs: "05 Jul 2026 12:00" → "Jul 5, 12:00" */
+/** Format a UTC timestamp string: "05 Jul 2026 12:00" → "Jul 5, 12:00" */
 function fmtSignalDate(utcStr: string | null | undefined, fallback: string | Date): string {
   if (utcStr) {
     try {
