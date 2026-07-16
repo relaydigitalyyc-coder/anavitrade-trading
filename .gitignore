@@ -21,3 +21,4 @@ scripts/data/models/*/classifier.pkl
 scripts/data/models/*/regressor.pkl
 scripts/data/models/*/calibrator.pkl
 scripts/data/models/*/*.pkl
+scripts/ml/venv/
