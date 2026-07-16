@@ -26,8 +26,9 @@ export default function AsterOnboarding() {
   const { data: status, isLoading: statusLoading } = trpc.aster.getStatus.useQuery();
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [activated, setActivated] = useState(false);
+  const [recentWalletAddress, setRecentWalletAddress] = useState<string | null>(null);
 
-  const walletAddress = wagmiAddress ?? web3Session?.walletAddress ?? null;
+  const walletAddress = wagmiAddress ?? recentWalletAddress ?? web3Session?.walletAddress ?? null;
   const isActive = status?.status === "active";
   const walletReady = !!walletAddress;
 
@@ -44,20 +45,15 @@ export default function AsterOnboarding() {
     onError: (e) => toast.error(e.message || "Failed to activate Aster."),
   });
 
-  const ensureServerWalletSession = async () => {
-    if (!wagmiAddress) {
-      setShowWalletModal(true);
-      throw new Error("Connect your wallet before activating Aster.");
-    }
-
-    const currentWallet = wagmiAddress.toLowerCase();
+  const ensureServerWalletSession = async (address: string) => {
+    const currentWallet = address.toLowerCase();
     const savedWallet = web3Session?.walletAddress?.toLowerCase();
     if (savedWallet === currentWallet) {
       return;
     }
 
     await saveWallet.mutateAsync({
-      walletAddress: wagmiAddress,
+      walletAddress: address,
       walletType: "other",
       chainId,
       maxDailyLossPct: 5,
@@ -66,17 +62,22 @@ export default function AsterOnboarding() {
   };
 
   const handleActivate = async () => {
-    if (!wagmiAddress) {
+    const provider = await connector?.getProvider();
+    const providerAccounts = provider && !wagmiAddress
+      ? await (provider as Parameters<typeof signAsterRegistrationTypedData>[0]["provider"]).request({ method: "eth_accounts" }).catch(() => [])
+      : [];
+    const providerAddress = Array.isArray(providerAccounts) && typeof providerAccounts[0] === "string" ? providerAccounts[0] : null;
+    const signingAddress = wagmiAddress ?? providerAddress ?? recentWalletAddress;
+    if (!provider || !signingAddress) {
       setShowWalletModal(true);
       return;
     }
     try {
-      await ensureServerWalletSession();
+      await ensureServerWalletSession(signingAddress);
       const challenge = await prepareRegistration.mutateAsync();
-      const provider = await connector?.getProvider();
       const signature = await signAsterRegistrationTypedData({
         provider: provider as Parameters<typeof signAsterRegistrationTypedData>[0]["provider"],
-        account: wagmiAddress as `0x${string}`,
+        account: signingAddress as `0x${string}`,
         typedData: challenge.typedData,
       });
       await completeRegistration.mutateAsync({
@@ -244,7 +245,9 @@ export default function AsterOnboarding() {
       <WalletConnectModal
         isOpen={showWalletModal}
         onClose={() => setShowWalletModal(false)}
-        onConnected={() => {
+        onConnected={(address) => {
+          setRecentWalletAddress(address);
+          setShowWalletModal(false);
           utils.web3Wallet.getSession.invalidate();
         }}
       />

@@ -71,6 +71,13 @@ async function assertApproveAgentContract() {
   assert.equal(params.has("asterChain"), false);
 }
 
+async function assertApproveAgentAcceptsEmptySuccessBody() {
+  configure();
+  globalThis.fetch = async () => new Response("", { status: 200 });
+  const result = await new AsterApiClient().approveAgent(approvalParams, "0xapprovalsignature");
+  assert.deepEqual(result, {});
+}
+
 async function assertCompatApprovalParams() {
   configure({
     ASTER_ENVIRONMENT: "testnet",
@@ -327,6 +334,7 @@ async function assertBalanceAndStrategyContracts() {
 }
 
 await assertApproveAgentContract();
+await assertApproveAgentAcceptsEmptySuccessBody();
 await assertCompatApprovalParams();
 await assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain();
 await assertOrderContract();

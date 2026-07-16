@@ -49,6 +49,16 @@ function unwrapAsterResponse<T>(data: T & { code?: number; msg?: string; data?: 
   return (data.data && typeof data.data === "object" ? data.data : data) as T;
 }
 
+async function readAsterJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`ASTER_INVALID_JSON_RESPONSE:${text.slice(0, 200)}`);
+  }
+}
+
 function numberValue(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -68,7 +78,7 @@ export class AsterApiClient {
   async getServerTime(): Promise<number> {
     const response = await fetch(`${this.baseUrl}/fapi/v3/time`);
     if (!response.ok) throw new Error(`ASTER_TIME_FAILED:${response.status}`);
-    const data = (await response.json()) as { serverTime?: number };
+    const data = await readAsterJson<{ serverTime?: number }>(response);
     return Number(data.serverTime ?? Date.now());
   }
 
@@ -82,7 +92,7 @@ export class AsterApiClient {
       const text = await response.text().catch(() => "unknown");
       throw new Error(`ASTER_PRICE_REJECTED:${response.status}:${text.slice(0, 200)}`);
     }
-    const data = (await response.json()) as { price?: string | number };
+    const data = await readAsterJson<{ price?: string | number }>(response);
     const price = Number(data.price);
     if (!Number.isFinite(price) || price <= 0) throw new Error("ASTER_PRICE_UNAVAILABLE");
     return price;
@@ -123,7 +133,7 @@ export class AsterApiClient {
       throw new Error(`ASTER_REQUEST_REJECTED:${response.status}:${text.slice(0, 200)}`);
     }
 
-    const data = await response.json() as T & { code?: number; msg?: string; data?: unknown };
+    const data = await readAsterJson<T & { code?: number; msg?: string; data?: unknown }>(response);
     return unwrapAsterResponse<T>(data);
   }
 
@@ -174,7 +184,7 @@ export class AsterApiClient {
       throw new Error(`ASTER_AGENT_REGISTRATION_REJECTED:${response.status}:${text.slice(0, 200)}`);
     }
 
-    const data = await response.json() as { code?: number; msg?: string; [key: string]: unknown };
+    const data = await readAsterJson<{ code?: number; msg?: string; [key: string]: unknown }>(response);
     if (typeof data.code === "number" && data.code < 0) {
       throw new Error(`ASTER_AGENT_REGISTRATION_REJECTED:${data.code}:${data.msg ?? "unknown"}`);
     }
