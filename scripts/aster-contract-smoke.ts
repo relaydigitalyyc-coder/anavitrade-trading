@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { setEnv } from "../src/server/_core/env";
 import { AsterApiClient } from "../src/server/aster/client";
 import type { AsterAgentRegistrationParams, AsterOrderRequest } from "../src/server/aster/types";
+import { signAsterRegistrationTypedData } from "../src/lib/asterWalletSignature";
 
 function configure(overrides: Partial<Parameters<typeof setEnv>[0]> = {}) {
   setEnv({
@@ -87,6 +88,49 @@ async function assertCompatApprovalParams() {
   const params = new URL(calls[0].url).searchParams;
   assert.equal(params.get("asterChain"), "Testnet");
   assert.equal(params.get("signatureChainId"), "714");
+}
+
+async function assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain() {
+  let rpcCall: { method: string; params?: unknown[] } | null = null;
+  const provider = {
+    async request(args: { method: string; params?: unknown[] }) {
+      rpcCall = args;
+      return "0xabcdef";
+    },
+  };
+
+  const typedData = {
+    domain: {
+      name: "AsterSignTransaction",
+      version: "1",
+      chainId: 1666,
+      verifyingContract: "0x0000000000000000000000000000000000000000",
+    },
+    types: {
+      ApproveAgent: [
+        { name: "AgentName", type: "string" },
+        { name: "CanWithdraw", type: "bool" },
+      ],
+    },
+    primaryType: "ApproveAgent",
+    message: {
+      AgentName: "Anavitrade",
+      CanWithdraw: false,
+    },
+  };
+
+  const signature = await signAsterRegistrationTypedData({
+    provider,
+    account: "0x3333333333333333333333333333333333333333",
+    typedData,
+  });
+
+  assert.equal(signature, "0xabcdef");
+  assert.equal(rpcCall?.method, "eth_signTypedData_v4");
+  assert.deepEqual(rpcCall?.params?.slice(0, 1), ["0x3333333333333333333333333333333333333333"]);
+  const payload = JSON.parse(rpcCall?.params?.[1] as string);
+  assert.equal(payload.domain.chainId, 1666);
+  assert.equal(payload.primaryType, "ApproveAgent");
 }
 
 async function assertOrderContract() {
@@ -284,6 +328,7 @@ async function assertBalanceAndStrategyContracts() {
 
 await assertApproveAgentContract();
 await assertCompatApprovalParams();
+await assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain();
 await assertOrderContract();
 await assertReadbackAndLifecycleContracts();
 await assertBalanceAndStrategyContracts();

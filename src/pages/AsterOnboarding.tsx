@@ -11,17 +11,17 @@ import {
   ExternalLink,
   Sparkles,
 } from "lucide-react";
-import { useAccount, useChainId, useSignTypedData } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import WalletConnectModal from "@/components/WalletConnectModal";
+import { signAsterRegistrationTypedData } from "@/lib/asterWalletSignature";
 
 export default function AsterOnboarding() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const { address: wagmiAddress } = useAccount();
+  const { address: wagmiAddress, connector } = useAccount();
   const chainId = useChainId();
-  const { signTypedDataAsync } = useSignTypedData();
   const { data: web3Session } = trpc.web3Wallet.getSession.useQuery();
   const { data: status, isLoading: statusLoading } = trpc.aster.getStatus.useQuery();
   const [showWalletModal, setShowWalletModal] = useState(false);
@@ -73,11 +73,12 @@ export default function AsterOnboarding() {
     try {
       await ensureServerWalletSession();
       const challenge = await prepareRegistration.mutateAsync();
-      const typedData = {
-        ...challenge.typedData,
+      const provider = await connector?.getProvider();
+      const signature = await signAsterRegistrationTypedData({
+        provider: provider as Parameters<typeof signAsterRegistrationTypedData>[0]["provider"],
         account: wagmiAddress as `0x${string}`,
-      } as unknown as Parameters<typeof signTypedDataAsync>[0];
-      const signature = await signTypedDataAsync(typedData);
+        typedData: challenge.typedData,
+      });
       await completeRegistration.mutateAsync({
         params: challenge.params,
         signature,

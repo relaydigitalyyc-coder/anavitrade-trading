@@ -14,16 +14,26 @@ import sys, json, argparse, time
 import numpy as np
 from pathlib import Path
 
-# Ensure project root in path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+# Ensure project root in path for both local and VPS
+_sys_path = Path(__file__).resolve().parent.parent.parent
+if str(_sys_path) not in sys.path:
+    sys.path.insert(0, str(_sys_path))
 
-from scripts.ml.pipeline.config import PipelineConfig, DEFAULT, CONFIG_4H, CONFIG_1H_WIDE
-from scripts.ml.pipeline.features import enrich
-from scripts.ml.pipeline.smc import extract, SMCSignals
-from scripts.ml.pipeline.enrichment import build_row
-from scripts.ml.pipeline.labels import compute_outcome
-from scripts.ml.pipeline.model import train_chronological, save_model
-from scripts.ml.pipeline.backtest import sweep, find_best, print_table, print_best
+# Try absolute imports first (local), fall back to relative (VPS)
+try:
+    from scripts.ml.pipeline.config import PipelineConfig, DEFAULT, CONFIG_4H, CONFIG_1H_WIDE
+    from scripts.ml.pipeline.features import enrich
+    from scripts.ml.pipeline.smc import extract, SMCSignals
+    from scripts.ml.pipeline.enrichment import build_row
+    from scripts.ml.pipeline.labels import compute_outcome
+    from scripts.ml.pipeline.model import train_chronological, save_model
+except ImportError:
+    from pipeline.config import PipelineConfig, DEFAULT, CONFIG_4H, CONFIG_1H_WIDE
+    from pipeline.features import enrich
+    from pipeline.smc import extract, SMCSignals
+    from pipeline.enrichment import build_row
+    from pipeline.labels import compute_outcome
+    from pipeline.model import train_chronological, save_model
 
 
 def main():
@@ -46,8 +56,16 @@ def main():
     t0 = time.time()
 
     # ═══ 1. Load klines ═══
+    # Look in multiple locations: project-relative, adjacent, absolute
     klines_path = Path(__file__).resolve().parent.parent / 'data' / 'klines-mtf.json'
-    klines_path = Path('/home/ariel/anavitrade-trading/scripts/data/klines-mtf.json')
+    if not klines_path.exists():
+        klines_path = Path(__file__).resolve().parent / 'klines-mtf.json'
+    if not klines_path.exists():
+        klines_path = Path('klines-mtf.json')
+    if not klines_path.exists():
+        klines_path = Path('scripts/data/klines-mtf.json')
+    if hasattr(args, 'input') and args.input:
+        klines_path = Path(args.input)
 
     print(f"Loading klines from {klines_path}...")
     with open(klines_path) as f:
@@ -106,14 +124,13 @@ def main():
     losses = sum(1 for r in all_rows if r['hitStop'])
     print(f"  Wins: {wins}, Losses: {losses}, Baseline WR: {wins/(wins+losses)*100:.1f}%\n")
 
-    # Save training data
-    output_path = args.output or str(cfg.training_output)
-    if not Path(output_path).is_absolute():
-        output_path = str(Path('/home/ariel/anavitrade-trading') / cfg.training_output)
+    # Save training data (project-relative)
+    output_path = args.output if hasattr(args, 'output') and args.output else None
+    if not output_path:
+        output_path = str(Path(__file__).resolve().parent.parent / 'data' / 'training-data-1h-pure.json')
 
     with open(output_path, 'w') as f:
         for row in all_rows:
-            # Convert numpy types to native Python for JSON
             clean = {}
             for k, v in row.items():
                 if hasattr(v, 'item'): clean[k] = v.item()
@@ -123,14 +140,15 @@ def main():
             f.write(json.dumps(clean) + '\n')
     print(f"Saved training data to {output_path} ({len(all_rows)} rows)")
 
-    if args.dry_run:
+    if hasattr(args, 'dry_run') and args.dry_run:
         print("Dry run complete. Skipping training.")
         return
 
     # ═══ 3. Train model ═══
     print("\nTraining model...")
     artifacts = train_chronological(all_rows, cfg)
-    save_model(artifacts, Path('/home/ariel/anavitrade-trading') / cfg.model_dir)
+    model_dir = Path(__file__).resolve().parent.parent / 'data' / 'models' / 'meta-v18-vps'
+    save_model(artifacts, model_dir)
 
     elapsed_total = time.time() - t0
     print(f"\nPipeline complete in {elapsed_total:.0f}s")
