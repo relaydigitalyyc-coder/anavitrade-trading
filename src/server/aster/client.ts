@@ -167,9 +167,7 @@ export class AsterApiClient {
       if (value !== undefined && value !== null) queryParams.set(key, String(value));
     }
     queryParams.set("signature", signature);
-    if (getAsterConfig().includeCompatParams) {
-      queryParams.set("signatureChainId", String(getAsterConfig().codeSigningChainId));
-    }
+    queryParams.set("signatureChainId", String(getAsterConfig().codeSigningChainId));
 
     const response = await fetch(`${this.baseUrl}/fapi/v3/approveAgent?${queryParams.toString()}`, {
       method: "POST",

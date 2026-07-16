@@ -48,7 +48,8 @@ export default function AsterOnboarding() {
   const ensureServerWalletSession = async (address: string) => {
     const currentWallet = address.toLowerCase();
     const savedWallet = web3Session?.walletAddress?.toLowerCase();
-    if (savedWallet === currentWallet) {
+    const recentlySavedWallet = recentWalletAddress?.toLowerCase();
+    if (savedWallet === currentWallet || recentlySavedWallet === currentWallet) {
       return;
     }
 

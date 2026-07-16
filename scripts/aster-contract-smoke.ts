@@ -67,7 +67,7 @@ async function assertApproveAgentContract() {
   assert.equal(params.get("user"), approvalParams.user);
   assert.equal(params.get("nonce"), String(approvalParams.nonce));
   assert.equal(params.get("signature"), "0xapprovalsignature");
-  assert.equal(params.has("signatureChainId"), false);
+  assert.equal(params.get("signatureChainId"), "1666");
   assert.equal(params.has("asterChain"), false);
 }
 

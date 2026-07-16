@@ -1,0 +1,979 @@
+{
+  "version": "production-backtest-v1",
+  "timestamp": "20260716_183352",
+  "mode": "pre_trained",
+  "quick": false,
+  "data": {
+    "pairs": 50,
+    "total_rows": 34298,
+    "baseline_wr": 0.2848
+  },
+  "split": {
+    "method": "chronological_70_15_15",
+    "train_rows": 14110,
+    "val_rows": 10094,
+    "test_rows": 10094,
+    "train_start": "2024-02-15 22:45",
+    "train_end": "2026-07-13 00:30",
+    "test_start": "2026-07-14 02:30",
+    "test_end": "2026-07-15 04:00"
+  },
+  "model": {
+    "path": "scripts/data/models/meta-v20-mtf-context",
+    "type": "LGBMClassifier",
+    "trees": 300
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.1,
+      "pass_pct": 98.75,
+      "trades": 9968,
+      "wr": 0.2756,
+      "pf": 0.84,
+      "sharpe": -7.64,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.12,
+      "pass_pct": 97.48,
+      "trades": 9840,
+      "wr": 0.276,
+      "pf": 0.84,
+      "sharpe": -7.63,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.14,
+      "pass_pct": 95.21,
+      "trades": 9610,
+      "wr": 0.2767,
+      "pf": 0.83,
+      "sharpe": -7.6,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.16,
+      "pass_pct": 92.0,
+      "trades": 9286,
+      "wr": 0.2787,
+      "pf": 0.84,
+      "sharpe": -7.21,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.18,
+      "pass_pct": 87.7,
+      "trades": 8852,
+      "wr": 0.2805,
+      "pf": 0.85,
+      "sharpe": -6.76,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.2,
+      "pass_pct": 83.53,
+      "trades": 8432,
+      "wr": 0.2814,
+      "pf": 0.85,
+      "sharpe": -6.41,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.22,
+      "pass_pct": 78.54,
+      "trades": 7928,
+      "wr": 0.2823,
+      "pf": 0.85,
+      "sharpe": -6.16,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.24,
+      "pass_pct": 73.27,
+      "trades": 7396,
+      "wr": 0.2824,
+      "pf": 0.85,
+      "sharpe": -5.97,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.26,
+      "pass_pct": 68.24,
+      "trades": 6888,
+      "wr": 0.2854,
+      "pf": 0.86,
+      "sharpe": -5.32,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.28,
+      "pass_pct": 63.32,
+      "trades": 6392,
+      "wr": 0.2819,
+      "pf": 0.85,
+      "sharpe": -5.68,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.3,
+      "pass_pct": 59.22,
+      "trades": 5978,
+      "wr": 0.2797,
+      "pf": 0.84,
+      "sharpe": -5.88,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.32,
+      "pass_pct": 55.16,
+      "trades": 5568,
+      "wr": 0.2777,
+      "pf": 0.83,
+      "sharpe": -5.93,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.34,
+      "pass_pct": 50.98,
+      "trades": 5146,
+      "wr": 0.2779,
+      "pf": 0.83,
+      "sharpe": -5.64,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.36,
+      "pass_pct": 47.08,
+      "trades": 4752,
+      "wr": 0.2797,
+      "pf": 0.84,
+      "sharpe": -5.37,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.38,
+      "pass_pct": 43.25,
+      "trades": 4366,
+      "wr": 0.2787,
+      "pf": 0.83,
+      "sharpe": -5.38,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.4,
+      "pass_pct": 40.32,
+      "trades": 4070,
+      "wr": 0.2801,
+      "pf": 0.83,
+      "sharpe": -5.14,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.42,
+      "pass_pct": 36.99,
+      "trades": 3734,
+      "wr": 0.2783,
+      "pf": 0.82,
+      "sharpe": -5.16,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.44,
+      "pass_pct": 33.54,
+      "trades": 3386,
+      "wr": 0.2791,
+      "pf": 0.82,
+      "sharpe": -4.91,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.46,
+      "pass_pct": 30.32,
+      "trades": 3060,
+      "wr": 0.2778,
+      "pf": 0.82,
+      "sharpe": -4.88,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.48,
+      "pass_pct": 27.62,
+      "trades": 2788,
+      "wr": 0.278,
+      "pf": 0.82,
+      "sharpe": -4.64,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.5,
+      "pass_pct": 24.65,
+      "trades": 2488,
+      "wr": 0.2789,
+      "pf": 0.82,
+      "sharpe": -4.41,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.52,
+      "pass_pct": 21.72,
+      "trades": 2192,
+      "wr": 0.2856,
+      "pf": 0.84,
+      "sharpe": -3.64,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.54,
+      "pass_pct": 18.45,
+      "trades": 1862,
+      "wr": 0.283,
+      "pf": 0.84,
+      "sharpe": -3.39,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.56,
+      "pass_pct": 15.81,
+      "trades": 1596,
+      "wr": 0.2851,
+      "pf": 0.84,
+      "sharpe": -3.02,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.58,
+      "pass_pct": 13.12,
+      "trades": 1324,
+      "wr": 0.284,
+      "pf": 0.84,
+      "sharpe": -2.8,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.6,
+      "pass_pct": 10.76,
+      "trades": 1086,
+      "wr": 0.2919,
+      "pf": 0.86,
+      "sharpe": -2.2,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.62,
+      "pass_pct": 8.68,
+      "trades": 876,
+      "wr": 0.2979,
+      "pf": 0.88,
+      "sharpe": -1.75,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.64,
+      "pass_pct": 6.8,
+      "trades": 686,
+      "wr": 0.3047,
+      "pf": 0.87,
+      "sharpe": -1.59,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.66,
+      "pass_pct": 5.11,
+      "trades": 516,
+      "wr": 0.3062,
+      "pf": 0.87,
+      "sharpe": -1.37,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.68,
+      "pass_pct": 3.88,
+      "trades": 392,
+      "wr": 0.301,
+      "pf": 0.83,
+      "sharpe": -1.72,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.7,
+      "pass_pct": 2.93,
+      "trades": 296,
+      "wr": 0.3209,
+      "pf": 0.88,
+      "sharpe": -1.04,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.72,
+      "pass_pct": 1.9,
+      "trades": 192,
+      "wr": 0.3438,
+      "pf": 0.92,
+      "sharpe": -0.55,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.74,
+      "pass_pct": 1.21,
+      "trades": 122,
+      "wr": 0.3852,
+      "pf": 1.02,
+      "sharpe": 0.1,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.76,
+      "pass_pct": 0.83,
+      "trades": 84,
+      "wr": 0.4286,
+      "pf": 1.16,
+      "sharpe": 0.63,
+      "max_dd": 100.0
+    },
+    {
+      "threshold": 0.78,
+      "pass_pct": 0.52,
+      "trades": 52,
+      "wr": 0.4423,
+      "pf": 1.19,
+      "sharpe": 0.6,
+      "max_dd": 100.0
+    }
+  ],
+  "best_threshold": {
+    "threshold": 0.76,
+    "pass_pct": 0.83,
+    "trades": 84,
+    "wr": 0.4286,
+    "pf": 1.16,
+    "sharpe": 0.63,
+    "max_dd": 100.0,
+    "avg_r": 0.143,
+    "total_r": 12.01
+  },
+  "best_pf_threshold": {
+    "threshold": 0.78,
+    "pass_pct": 0.52,
+    "trades": 52,
+    "wr": 0.4423,
+    "pf": 1.19,
+    "sharpe": 0.6,
+    "max_dd": 100.0,
+    "avg_r": 0.181,
+    "total_r": 9.41
+  },
+  "detailed_metrics": {
+    "total_trades": 84,
+    "wins": 36,
+    "losses": 48,
+    "wr": 0.4286,
+    "pf": 1.16,
+    "sharpe": 0.63,
+    "max_dd_pct": 7.45,
+    "avg_r": 0.143,
+    "total_r": 12.01,
+    "total_return_usd": 1201.33,
+    "final_equity": 11201.33,
+    "return_pct": 12.01,
+    "per_pair": [
+      {
+        "symbol": "ALGOUSDT",
+        "trades": 8,
+        "wr": 0.375,
+        "pf": 0.97,
+        "net_pnl_r": -0.18,
+        "sharpe": -0.04
+      },
+      {
+        "symbol": "AVAXUSDT",
+        "trades": 10,
+        "wr": 0.5,
+        "pf": 1.57,
+        "net_pnl_r": 4.33,
+        "sharpe": 0.68
+      },
+      {
+        "symbol": "BCHUSDT",
+        "trades": 2,
+        "wr": 0.0,
+        "pf": 0.0,
+        "net_pnl_r": -3.0,
+        "sharpe": -24.04
+      },
+      {
+        "symbol": "COMPUSDT",
+        "trades": 6,
+        "wr": 0.5,
+        "pf": 1.36,
+        "net_pnl_r": 1.98,
+        "sharpe": 0.37
+      },
+      {
+        "symbol": "CRVUSDT",
+        "trades": 6,
+        "wr": 0.3333,
+        "pf": 0.93,
+        "net_pnl_r": -0.37,
+        "sharpe": -0.08
+      },
+      {
+        "symbol": "DOGEUSDT",
+        "trades": 4,
+        "wr": 0.5,
+        "pf": 1.58,
+        "net_pnl_r": 2.06,
+        "sharpe": 0.44
+      },
+      {
+        "symbol": "ETCUSDT",
+        "trades": 10,
+        "wr": 0.5,
+        "pf": 1.47,
+        "net_pnl_r": 4.05,
+        "sharpe": 0.58
+      },
+      {
+        "symbol": "KAVAUSDT",
+        "trades": 6,
+        "wr": 0.1667,
+        "pf": 0.29,
+        "net_pnl_r": -5.32,
+        "sharpe": -1.51
+      },
+      {
+        "symbol": "LINKUSDT",
+        "trades": 6,
+        "wr": 0.5,
+        "pf": 1.46,
+        "net_pnl_r": 2.6,
+        "sharpe": 0.43
+      },
+      {
+        "symbol": "NEARUSDT",
+        "trades": 8,
+        "wr": 0.5,
+        "pf": 1.7,
+        "net_pnl_r": 4.07,
+        "sharpe": 0.73
+      },
+      {
+        "symbol": "RUNEUSDT",
+        "trades": 4,
+        "wr": 0.5,
+        "pf": 1.29,
+        "net_pnl_r": 1.27,
+        "sharpe": 0.25
+      },
+      {
+        "symbol": "SOLUSDT",
+        "trades": 10,
+        "wr": 0.4,
+        "pf": 1.06,
+        "net_pnl_r": 0.51,
+        "sharpe": 0.09
+      },
+      {
+        "symbol": "TRBUSDT",
+        "trades": 4,
+        "wr": 0.5,
+        "pf": 1.0,
+        "net_pnl_r": 0.0,
+        "sharpe": 0.0
+      }
+    ],
+    "regime_breakdown": {
+      "momentum": {
+        "trades": 64,
+        "wr": 0.4219,
+        "pf": 1.11
+      },
+      "reversal": {
+        "trades": 12,
+        "wr": 0.4167,
+        "pf": 1.2
+      },
+      "other": {
+        "trades": 8,
+        "wr": 0.5,
+        "pf": 1.46
+      }
+    },
+    "equity_curve": [
+      10000.0,
+      9858.82,
+      9700.0,
+      9962.5,
+      9845.83,
+      10097.83,
+      9901.83,
+      10217.96,
+      10105.06,
+      10338.39,
+      10105.06,
+      10317.18,
+      10105.06,
+      10438.87,
+      10105.06,
+      10338.39,
+      10208.76,
+      10469.78,
+      10364.98,
+      10570.86,
+      10467.92,
+      10686.67,
+      10555.42,
+      10774.17,
+      10642.92,
+      10481.38,
+      10346.76,
+      10662.26,
+      10504.51,
+      10720.69,
+      10504.51,
+      10727.7,
+      10545.09,
+      10853.62,
+      10750.78,
+      11001.66,
+      10750.78,
+      10626.03,
+      10480.48,
+      10380.48,
+      10218.94,
+      10440.89,
+      10218.94,
+      10468.94,
+      10359.85,
+      10597.76,
+      10478.81,
+      10338.81,
+      10182.34,
+      10440.23,
+      10182.34,
+      10424.15,
+      10182.34,
+      10427.34,
+      10182.34,
+      10500.52,
+      10309.61,
+      10573.54,
+      10309.61,
+      10518.3,
+      10392.22,
+      10593.18,
+      10478.02,
+      10694.23,
+      10589.34,
+      10475.1,
+      10360.85,
+      10577.78,
+      10360.85,
+      10705.43,
+      10536.39,
+      10738.49,
+      10594.97,
+      10817.35,
+      10708.69,
+      10918.69,
+      10794.24,
+      11053.5,
+      10897.95,
+      11154.44,
+      11004.82,
+      11238.15,
+      11102.04,
+      11345.3,
+      11201.33
+    ]
+  },
+  "feature_importance": {
+    "h4_bb_pos": 1472,
+    "m15_macd": 1191,
+    "h4_bb_width": 1029,
+    "h4_ao": 995,
+    "h4_rsi": 921,
+    "m15_atr_pct": 845,
+    "h1_ao": 788,
+    "h1_rsi": 761,
+    "m15_trend": 757,
+    "m15_bb_pos": 752,
+    "ao_gradient": 686,
+    "h1_bb_pos": 673,
+    "h1_bb_width": 661,
+    "m15_ao": 618,
+    "m15_ma7_slope": 612,
+    "h1_ma7_slope": 608,
+    "m15_rsi": 589,
+    "bb_sqz_product": 553,
+    "m15_bb_width": 547,
+    "h1_vol_z": 529,
+    "m15_swing_dist": 468,
+    "rsi_gradient": 389,
+    "tf_vol_sum": 337,
+    "m15_vol_z": 258,
+    "mtf_triple_agree": 67,
+    "h4_trend": 53,
+    "mtf_15_1h_agree": 19,
+    "h1_trend": 7,
+    "h4_macd": 0,
+    "h1_macd": 0
+  },
+  "shap_importance": {},
+  "goals_met": false,
+  "atr_verified": true,
+  "pair_stats": [
+    {
+      "symbol": "BTCUSDT",
+      "rows": 686,
+      "wins": 210,
+      "losses": 476,
+      "wr": 0.3061
+    },
+    {
+      "symbol": "ETHUSDT",
+      "rows": 686,
+      "wins": 221,
+      "losses": 465,
+      "wr": 0.3222
+    },
+    {
+      "symbol": "BCHUSDT",
+      "rows": 686,
+      "wins": 229,
+      "losses": 457,
+      "wr": 0.3338
+    },
+    {
+      "symbol": "XRPUSDT",
+      "rows": 686,
+      "wins": 203,
+      "losses": 483,
+      "wr": 0.2959
+    },
+    {
+      "symbol": "LTCUSDT",
+      "rows": 686,
+      "wins": 189,
+      "losses": 497,
+      "wr": 0.2755
+    },
+    {
+      "symbol": "TRXUSDT",
+      "rows": 686,
+      "wins": 239,
+      "losses": 447,
+      "wr": 0.3484
+    },
+    {
+      "symbol": "ETCUSDT",
+      "rows": 686,
+      "wins": 228,
+      "losses": 458,
+      "wr": 0.3324
+    },
+    {
+      "symbol": "LINKUSDT",
+      "rows": 686,
+      "wins": 196,
+      "losses": 490,
+      "wr": 0.2857
+    },
+    {
+      "symbol": "XLMUSDT",
+      "rows": 686,
+      "wins": 165,
+      "losses": 521,
+      "wr": 0.2405
+    },
+    {
+      "symbol": "ADAUSDT",
+      "rows": 686,
+      "wins": 199,
+      "losses": 487,
+      "wr": 0.2901
+    },
+    {
+      "symbol": "XMRUSDT",
+      "rows": 684,
+      "wins": 128,
+      "losses": 556,
+      "wr": 0.1871
+    },
+    {
+      "symbol": "DASHUSDT",
+      "rows": 686,
+      "wins": 221,
+      "losses": 465,
+      "wr": 0.3222
+    },
+    {
+      "symbol": "ZECUSDT",
+      "rows": 686,
+      "wins": 264,
+      "losses": 422,
+      "wr": 0.3848
+    },
+    {
+      "symbol": "XTZUSDT",
+      "rows": 686,
+      "wins": 224,
+      "losses": 462,
+      "wr": 0.3265
+    },
+    {
+      "symbol": "BNBUSDT",
+      "rows": 686,
+      "wins": 242,
+      "losses": 444,
+      "wr": 0.3528
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "rows": 686,
+      "wins": 212,
+      "losses": 474,
+      "wr": 0.309
+    },
+    {
+      "symbol": "ONTUSDT",
+      "rows": 686,
+      "wins": 212,
+      "losses": 474,
+      "wr": 0.309
+    },
+    {
+      "symbol": "IOTAUSDT",
+      "rows": 686,
+      "wins": 212,
+      "losses": 474,
+      "wr": 0.309
+    },
+    {
+      "symbol": "BATUSDT",
+      "rows": 686,
+      "wins": 248,
+      "losses": 438,
+      "wr": 0.3615
+    },
+    {
+      "symbol": "VETUSDT",
+      "rows": 686,
+      "wins": 137,
+      "losses": 549,
+      "wr": 0.1997
+    },
+    {
+      "symbol": "NEOUSDT",
+      "rows": 686,
+      "wins": 222,
+      "losses": 464,
+      "wr": 0.3236
+    },
+    {
+      "symbol": "QTUMUSDT",
+      "rows": 686,
+      "wins": 208,
+      "losses": 478,
+      "wr": 0.3032
+    },
+    {
+      "symbol": "IOSTUSDT",
+      "rows": 686,
+      "wins": 168,
+      "losses": 518,
+      "wr": 0.2449
+    },
+    {
+      "symbol": "THETAUSDT",
+      "rows": 686,
+      "wins": 169,
+      "losses": 517,
+      "wr": 0.2464
+    },
+    {
+      "symbol": "ALGOUSDT",
+      "rows": 686,
+      "wins": 180,
+      "losses": 506,
+      "wr": 0.2624
+    },
+    {
+      "symbol": "ZILUSDT",
+      "rows": 686,
+      "wins": 137,
+      "losses": 549,
+      "wr": 0.1997
+    },
+    {
+      "symbol": "KNCUSDT",
+      "rows": 686,
+      "wins": 223,
+      "losses": 463,
+      "wr": 0.3251
+    },
+    {
+      "symbol": "ZRXUSDT",
+      "rows": 686,
+      "wins": 179,
+      "losses": 507,
+      "wr": 0.2609
+    },
+    {
+      "symbol": "COMPUSDT",
+      "rows": 686,
+      "wins": 172,
+      "losses": 514,
+      "wr": 0.2507
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "rows": 686,
+      "wins": 193,
+      "losses": 493,
+      "wr": 0.2813
+    },
+    {
+      "symbol": "KAVAUSDT",
+      "rows": 686,
+      "wins": 189,
+      "losses": 497,
+      "wr": 0.2755
+    },
+    {
+      "symbol": "BANDUSDT",
+      "rows": 686,
+      "wins": 177,
+      "losses": 509,
+      "wr": 0.258
+    },
+    {
+      "symbol": "RLCUSDT",
+      "rows": 686,
+      "wins": 218,
+      "losses": 468,
+      "wr": 0.3178
+    },
+    {
+      "symbol": "SNXUSDT",
+      "rows": 686,
+      "wins": 128,
+      "losses": 558,
+      "wr": 0.1866
+    },
+    {
+      "symbol": "DOTUSDT",
+      "rows": 686,
+      "wins": 153,
+      "losses": 533,
+      "wr": 0.223
+    },
+    {
+      "symbol": "YFIUSDT",
+      "rows": 686,
+      "wins": 219,
+      "losses": 467,
+      "wr": 0.3192
+    },
+    {
+      "symbol": "CRVUSDT",
+      "rows": 686,
+      "wins": 210,
+      "losses": 476,
+      "wr": 0.3061
+    },
+    {
+      "symbol": "TRBUSDT",
+      "rows": 686,
+      "wins": 181,
+      "losses": 505,
+      "wr": 0.2638
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "rows": 686,
+      "wins": 171,
+      "losses": 515,
+      "wr": 0.2493
+    },
+    {
+      "symbol": "SUSHIUSDT",
+      "rows": 686,
+      "wins": 186,
+      "losses": 500,
+      "wr": 0.2711
+    },
+    {
+      "symbol": "EGLDUSDT",
+      "rows": 686,
+      "wins": 194,
+      "losses": 492,
+      "wr": 0.2828
+    },
+    {
+      "symbol": "SOLUSDT",
+      "rows": 686,
+      "wins": 208,
+      "losses": 478,
+      "wr": 0.3032
+    },
+    {
+      "symbol": "ICXUSDT",
+      "rows": 686,
+      "wins": 193,
+      "losses": 493,
+      "wr": 0.2813
+    },
+    {
+      "symbol": "STORJUSDT",
+      "rows": 686,
+      "wins": 151,
+      "losses": 535,
+      "wr": 0.2201
+    },
+    {
+      "symbol": "UNIUSDT",
+      "rows": 686,
+      "wins": 160,
+      "losses": 526,
+      "wr": 0.2332
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "rows": 686,
+      "wins": 196,
+      "losses": 490,
+      "wr": 0.2857
+    },
+    {
+      "symbol": "ENJUSDT",
+      "rows": 686,
+      "wins": 213,
+      "losses": 473,
+      "wr": 0.3105
+    },
+    {
+      "symbol": "KSMUSDT",
+      "rows": 686,
+      "wins": 203,
+      "losses": 483,
+      "wr": 0.2959
+    },
+    {
+      "symbol": "NEARUSDT",
+      "rows": 686,
+      "wins": 201,
+      "losses": 485,
+      "wr": 0.293
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "rows": 686,
+      "wins": 188,
+      "losses": 498,
+      "wr": 0.2741
+    }
+  ],
+  "atr_verification": {
+    "status": "passed"
+  }
+}
