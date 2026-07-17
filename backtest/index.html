@@ -1,163 +1,278 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Backtest Dashboard - Anavitrade</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js" crossorigin></script>
-  <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.2.0",
-      "react-dom": "https://esm.sh/react-dom@18.2.0",
-      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-      "htm": "https://esm.sh/htm@3.1.1"
-    }
-  }
-  </script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      background: #0b0b12;
-      color: #e2e8f0;
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-    }
-    #root { min-height: 100vh; }
-
-    /* Glass card */
-    .glass {
-      background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
-    .glass-strong {
-      background: rgba(18,18,30,0.8);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-    }
-
-    /* Table styles */
-    .tbl { width: 100%; border-collapse: collapse; }
-    .tbl th {
-      padding: 0.75rem 1rem;
-      text-align: left;
-      font-weight: 600;
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #888;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-      position: sticky;
-      top: 0;
-      background: #14141f;
-    }
-    .tbl th:hover { color: #bbb; }
-    .tbl td {
-      padding: 0.65rem 1rem;
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-      font-size: 0.825rem;
-      white-space: nowrap;
-    }
-    .tbl tr:hover td { background: rgba(255,255,255,0.02); }
-    .tbl tr.highlight td {
-      background: rgba(34,197,94,0.08);
-      border-bottom-color: rgba(34,197,94,0.15);
-    }
-    .tbl tr.best-pf td {
-      background: rgba(59,130,246,0.08);
-      border-bottom-color: rgba(59,130,246,0.15);
-    }
-
-    /* Sort arrow */
-    .sort-arrow { display: inline-block; width: 16px; color: #555; margin-left: 4px; }
-    .sort-arrow.active { color: #22c55e; }
-    .sort-arrow::after { content: '\25B4\25BE'; letter-spacing: -2px; }
-
-    /* Value colors */
-    .val-pos { color: #22c55e; }
-    .val-neg { color: #ef4444; }
-    .val-neutral { color: #94a3b8; }
-    .val-highlight { color: #facc15; }
-
-    /* Loading spinner */
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid rgba(255,255,255,0.06);
-      border-top-color: #22c55e;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Equity chart container */
-    .chart-container { width: 100%; height: 400px; }
-    .chart-container > div { border-radius: 8px; }
-
-    /* Feature bar */
-    .feat-bar { transition: width 0.6s ease-out; }
-
-    /* Pagination */
-    .page-btn {
-      padding: 0.4rem 0.75rem;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      color: #e2e8f0;
-      cursor: pointer;
-      font-size: 0.8rem;
-    }
-    .page-btn:hover { background: rgba(255,255,255,0.08); }
-    .page-btn.active { background: rgba(34,197,94,0.15); border-color: #22c55e; }
-    .page-btn:disabled { opacity: 0.3; cursor: default; }
-
-    /* Responsive card grid */
-    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-    @media (max-width: 1024px) { .card-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 640px) { .card-grid { grid-template-columns: 1fr; } }
-
-    /* Stat value */
-    .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
-    .stat-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.25rem; }
-
-    /* Container */
-    .container { max-width: 1440px; margin: 0 auto; padding: 0 1.5rem; }
-    @media (max-width: 640px) { .container { padding: 0 1rem; } }
-
-    /* Scrollable table wrapper */
-    .table-wrap { overflow-x: auto; }
-
-    /* Header highlight stripe */
-    .accent-stripe { height: 3px; background: linear-gradient(90deg, #22c55e, #3b82f6); border-radius: 2px; }
-
-    /* Regime card */
-    .regime-card { text-align: center; padding: 1.25rem; }
-
-    /* Tooltip for best threshold */
-    .badge {
-      display: inline-block;
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .badge-green { background: rgba(34,197,94,0.15); color: #22c55e; }
-    .badge-blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anavitrade Backtest Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0b0b12;color:#e2e8f0;min-height:100vh}
+.gate{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:1rem;padding:2rem;text-align:center}
+.gate h1{font-size:1.5rem;color:#f1f5f9}.gate p{color:#888}.gate input{padding:0.6rem 1rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;width:280px;text-align:center}.gate button{padding:0.6rem 1.5rem;background:#3b82f6;border:none;border-radius:8px;color:#fff;cursor:pointer;font-weight:600}
+.container{max-width:1400px;margin:0 auto;padding:1.5rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem}
+.card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.25rem}
+.card-label{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:0.25rem}
+.card-value{font-size:1.5rem;font-weight:700}
+.card-sub{font-size:0.75rem;color:#666;margin-top:0.25rem}
+.chart-container{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.25rem;margin-bottom:1.5rem}
+.chart-container h3{font-size:0.9rem;color:#888;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:0.8rem}
+th{padding:0.6rem 0.75rem;text-align:left;font-weight:600;color:#888;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;white-space:nowrap}
+th:hover{color:#bbb}
+td{padding:0.5rem 0.75rem;border-bottom:1px solid rgba(255,255,255,0.03);white-space:nowrap}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.pos{color:#22c55e}.neg{color:#ef4444}.blue{color:#3b82f6}.purple{color:#a78bfa}
+.green-bg{background:rgba(34,197,94,0.08)}.red-bg{background:rgba(239,68,68,0.08)}
+.threshold-slider{width:100%;margin:0.5rem 0 1rem;accent-color:#3b82f6}
+.threshold-label{display:flex;justify-content:space-between;font-size:0.8rem;color:#888}
+.loading{display:flex;align-items:center;justify-content:center;min-height:60vh;color:#888;font-size:1.2rem}
+.error{display:flex;align-items:center;justify-content:center;min-height:60vh;color:#ef4444;flex-direction:column;gap:0.5rem}
+.tab{border:none;background:none;color:#888;padding:0.5rem 1rem;cursor:pointer;font-size:0.85rem;border-bottom:2px solid transparent}.tab.active{color:#f1f5f9;border-bottom-color:#3b82f6}
+.tabs{display:flex;gap:0;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.06)}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="module" src="./dashboard.js"></script>
+<div id="app"></div>
+
+<script>
+(function(){
+  // ═══ ACCESS GATE ═══
+  const params = new URLSearchParams(window.location.search);
+  const VALID_KEYS = ['anavitrade-founder-2026','dev'];
+  const key = params.get('key');
+  if (!VALID_KEYS.includes(key)) {
+    document.getElementById('app').innerHTML = '<div class="gate"><h1>🔒 Access Denied</h1><p>Founder-only dashboard. Provide a valid ?key= parameter.</p></div>';
+    return;
+  }
+
+  // ═══ STATE ═══
+  let allData = null;
+  let currentThreshold = 0.5;
+  let currentTab = 'overview';
+
+  // ═══ RENDER ═══
+  function render() {
+    if (!allData) {
+      document.getElementById('app').innerHTML = '<div class="loading">Loading backtest data...</div>';
+      return;
+    }
+
+    const d = allData;
+    const dm = d.detailed_metrics || {};
+    const sweep = d.threshold_sweep || [];
+    const trades = d.trades || [];
+    const pp = dm.per_pair || [];
+    const fi = d.feature_importance || {};
+    const bestT = d.best_threshold || {};
+    const bestPF = d.best_pf_threshold || {};
+
+    // Filter trades by threshold
+    const filtered = trades.filter(t => t.prob >= currentThreshold);
+    const fwins = filtered.filter(t => t.win).length;
+    const fwr = filtered.length > 0 ? (fwins / filtered.length * 100) : 0;
+
+    // Build sweep stats for current threshold
+    const sweepAt = sweep.find(s => Math.abs(s.threshold - currentThreshold) < 0.02) || {};
+
+    const html = `
+      <div class="container">
+        <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:0.25rem;">Anavitrade Backtest Dashboard</h1>
+        <p style="color:#888;font-size:0.8rem;margin-bottom:1.5rem;">${d.model || ''} | ${d.generated_at ? d.generated_at.slice(0,16) : ''} | Founder Access</p>
+
+        <!-- STATS -->
+        <div class="stats">
+          <div class="card">
+            <div class="card-label">Total Trades</div>
+            <div class="card-value blue">${(dm.total_trades || 0).toLocaleString()}</div>
+            <div class="card-sub">${dm.pairs || 0} pairs | ${(dm.total_rows || 0).toLocaleString()} rows</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Win Rate</div>
+            <div class="card-value" style="color:${(dm.wr||0)*100>=50?'#22c55e':'#ef4444'}">${((dm.wr||0)*100).toFixed(1)}%</div>
+            <div class="card-sub">${dm.wins || 0} wins / ${dm.losses || 0} losses</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Profit Factor</div>
+            <div class="card-value" style="color:${(dm.pf||0)>=1.5?'#22c55e':'#ef4444'}">${(dm.pf||0).toFixed(2)}</div>
+            <div class="card-sub">Sharpe ${(dm.sharpe||0).toFixed(2)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Max Drawdown</div>
+            <div class="card-value purple">${(dm.max_dd_pct||0).toFixed(1)}%</div>
+            <div class="card-sub">Return ${(dm.return_pct||0)>=0?'+':''}${(dm.return_pct||0).toFixed(1)}%</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Best WR Threshold</div>
+            <div class="card-value" style="color:#22c55e">P≥${(bestT.threshold||0).toFixed(2)}</div>
+            <div class="card-sub">${bestT.trades || 0} trades, WR ${((bestT.wr||0)*100).toFixed(1)}%, PF ${(bestT.pf||0).toFixed(1)}</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Best PF Threshold</div>
+            <div class="card-value" style="color:#3b82f6">P≥${(bestPF.threshold||0).toFixed(2)}</div>
+            <div class="card-sub">${bestPF.trades || 0} trades, WR ${((bestPF.wr||0)*100).toFixed(1)}%, PF ${(bestPF.pf||0).toFixed(1)}</div>
+          </div>
+        </div>
+
+        <!-- THRESHOLD SLIDER -->
+        <div class="card" style="margin-bottom:1rem">
+          <div class="threshold-label"><span>Threshold: P≥<b id="thVal">${currentThreshold.toFixed(2)}</b></span><span id="thStats">${filtered.length} trades | ${sweepAt.wr ? (sweepAt.wr*100).toFixed(1) : fwr.toFixed(1)}% WR | PF ${sweepAt.pf ? sweepAt.pf.toFixed(1) : '?'}</span></div>
+          <input type="range" class="threshold-slider" min="0.1" max="0.9" step="0.02" value="${currentThreshold}" id="thSlider">
+          <div class="threshold-label"><span>0.10</span><span>0.50</span><span>0.90</span></div>
+        </div>
+
+        <!-- TABS -->
+        <div class="tabs">
+          <button class="tab ${currentTab==='overview'?'active':''}" data-tab="overview">Overview</button>
+          <button class="tab ${currentTab==='sweep'?'active':''}" data-tab="sweep">Threshold Sweep</button>
+          <button class="tab ${currentTab==='trades'?'active':''}" data-tab="trades">Trade Table</button>
+          <button class="tab ${currentTab==='pairs'?'active':''}" data-tab="pairs">Per-Pair</button>
+          <button class="tab ${currentTab==='features'?'active':''}" data-tab="features">Features</button>
+        </div>
+
+        <!-- TAB CONTENT -->
+        <div id="tabContent"></div>
+      </div>
+    `;
+
+    document.getElementById('app').innerHTML = html;
+
+    // Render tab content
+    const tc = document.getElementById('tabContent');
+    if (currentTab === 'overview') renderOverview(tc, dm);
+    else if (currentTab === 'sweep') renderSweep(tc, sweep);
+    else if (currentTab === 'trades') renderTrades(tc, filtered);
+    else if (currentTab === 'pairs') renderPairs(tc, pp);
+    else if (currentTab === 'features') renderFeatures(tc, fi);
+
+    // Draw equity chart after DOM update
+    setTimeout(() => drawEquityChart(dm), 100);
+
+    // Attach listeners
+    document.getElementById('thSlider').addEventListener('input', function(e) {
+      currentThreshold = parseFloat(e.target.value);
+      render();
+    });
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', function() {
+        currentTab = this.dataset.tab;
+        render();
+      });
+    });
+  }
+
+  function renderOverview(el, dm) {
+    el.innerHTML = '<div class="chart-container"><h3>Equity Curve (top 80% probability trades, 1% risk)</h3><canvas id="equityChart"></canvas></div>';
+  }
+
+  function renderSweep(el, sweep) {
+    let rows = sweep.map(s => `
+      <tr class="${s.wr*100>=50&&s.pf>=2.5?'green-bg':s.pf>=2?'':'red-bg'}">
+        <td>P≥${s.threshold.toFixed(2)}</td><td>${s.trades}</td><td>${s.pass_pct.toFixed(1)}%</td>
+        <td class="${s.wr*100>=50?'pos':'neg'}">${(s.wr*100).toFixed(1)}%</td>
+        <td class="${s.pf>=1.5?'pos':'neg'}">${s.pf.toFixed(2)}</td>
+        <td>${s.sharpe.toFixed(2)}</td><td class="purple">${s.max_dd.toFixed(1)}%</td>
+        <td class="${s.avg_r>0?'pos':'neg'}">${s.avg_r>=0?'+':''}${(s.avg_r||0).toFixed(3)}R</td>
+        <td>${s.wr*100>=50&&s.pf>=2.6?'🎯':s.pf>=2?'✓':''}</td>
+      </tr>`).join('');
+    el.innerHTML = `<div class="chart-container" style="max-height:70vh;overflow-y:auto">
+      <h3>Threshold Sweep (${sweep.length} points)</h3>
+      <table><thead><tr><th>Threshold</th><th>Trades</th><th>Pass%</th><th>WR</th><th>PF</th><th>Sharpe</th><th>MaxDD</th><th>AvgR</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function renderTrades(el, trades) {
+    const rows = trades.slice(0, 200).map(t => `
+      <tr class="${t.win?'green-bg':'red-bg'}">
+        <td>${t.sym||'?'}</td><td>${t.date||'?'}</td><td>${t.direction||'LONG'}</td>
+        <td>${(t.entry||0).toFixed(t.entry<1?5:2)}</td><td>${(t.exit||0).toFixed(t.exit<1?5:2)}</td>
+        <td class="${(t.net_r||0)>0?'pos':'neg'}">${(t.net_r||0)>=0?'+':''}${(t.net_r||0).toFixed(3)}R</td>
+        <td>${(t.prob||0).toFixed(3)}</td><td>${t.win?'✅':'❌'}</td>
+        <td>${t.bars||'?'}</td><td>${(t.m15_rsi||0).toFixed(1)}</td><td>${(t.h4_bb_pos||0).toFixed(3)}</td>
+      </tr>`).join('');
+    el.innerHTML = `<div class="chart-container" style="max-height:70vh;overflow-y:auto">
+      <h3>Filtered Trades (P≥${currentThreshold.toFixed(2)}: ${trades.length} trades, showing first 200)</h3>
+      <table><thead><tr><th>Symbol</th><th>Date</th><th>Dir</th><th>Entry</th><th>Exit</th><th>R</th><th>Prob</th><th>Win</th><th>Bars</th><th>RSI</th><th>BB</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function renderPairs(el, pp) {
+    const rows = pp.map(p => `
+      <tr><td>${p.symbol}</td><td>${p.trades}</td><td class="${p.wr*100>=50?'pos':'neg'}">${(p.wr*100).toFixed(1)}%</td>
+      <td class="${p.pf>=1.5?'pos':'neg'}">${p.pf.toFixed(2)}</td><td>${p.sharpe.toFixed(2)}</td>
+      <td class="${p.avg_r>0?'pos':'neg'}">${p.avg_r>=0?'+':''}${p.avg_r.toFixed(3)}R</td></tr>`).join('');
+    el.innerHTML = `<div class="chart-container" style="max-height:70vh;overflow-y:auto">
+      <h3>Per-Pair Breakdown (${pp.length} pairs)</h3>
+      <table><thead><tr><th>Symbol</th><th>Trades</th><th>WR</th><th>PF</th><th>Sharpe</th><th>AvgR</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function renderFeatures(el, fi) {
+    const sorted = Object.entries(fi).sort((a,b) => b[1]-a[1]);
+    const maxVal = sorted[0]?.[1] || 1;
+    const bars = sorted.slice(0,20).map(([name,val]) => `
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+        <span style="width:160px;text-align:right;font-size:0.75rem;color:#aaa;">${name}</span>
+        <div style="flex:1;height:20px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${val/maxVal*100}%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:4px;transition:width 0.3s;"></div>
+        </div>
+        <span style="font-size:0.75rem;color:#888;width:50px;">${Math.round(val)}</span>
+      </div>`).join('');
+    el.innerHTML = `<div class="card"><h3 style="color:#888;font-size:0.9rem;margin-bottom:1rem;">Feature Importance (LightGBM gain)</h3>${bars}</div>`;
+  }
+
+  function drawEquityChart(dm) {
+    const canvas = document.getElementById('equityChart');
+    if (!canvas) return;
+    const ec = dm.equity_curve || [];
+    if (ec.length < 2) return;
+
+    // Handle both formats: [{trade,equity}] or [number, number]
+    const isObj = typeof ec[0] === 'object' && ec[0] !== null;
+    const labels = isObj ? ec.map(p => p.trade) : ec.map((_,i)=>i);
+    const values = isObj ? ec.map(p => p.equity) : ec;
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels.filter((_,i) => i % Math.max(1,Math.floor(labels.length/100)) === 0),
+        datasets: [{
+          label: 'Equity ($)',
+          data: values,
+          borderColor: values[values.length-1] >= values[0] ? '#22c55e' : '#ef4444',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#888', callback: v => '$' + v.toLocaleString() }
+          }
+        }
+      }
+    });
+    canvas.style.height = '300px';
+  }
+
+  // ═══ LOAD DATA ═══
+  fetch('./backtest-dashboard-data.json')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      allData = data;
+      console.log('Dashboard loaded:', data.version, data.detailed_metrics?.total_trades, 'trades');
+      render();
+    })
+    .catch(err => {
+      document.getElementById('app').innerHTML = `<div class="error"><p>Failed to load backtest data</p><p style="font-size:0.8rem;">${err.message}</p><button onclick="location.reload()" style="margin-top:1rem;padding:0.5rem 1.5rem;background:#3b82f6;border:none;border-radius:8px;color:#fff;cursor:pointer;">Retry</button></div>`;
+      console.error('Dashboard load error:', err);
+    });
+})();
+</script>
 </body>
 </html>

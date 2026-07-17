@@ -1,0 +1,33 @@
+{
+  "features": [
+    "m15_rsi",
+    "m15_bb_w",
+    "m15_bb_p",
+    "m15_ao",
+    "m15_macd",
+    "m15_vz",
+    "m15_m7s",
+    "m15_trend",
+    "m15_atr_pct",
+    "h1_rsi",
+    "h1_bb_w",
+    "h1_bb_p",
+    "h1_ao",
+    "h1_macd",
+    "h1_m7s",
+    "h4_rsi",
+    "h4_bb_w",
+    "h4_bb_p",
+    "h4_ao",
+    "h4_macd",
+    "h4_trend"
+  ],
+  "n": 39688,
+  "baseline_wr": 0.34000201572263655,
+  "test_wr": 0.65,
+  "test_pf": 3.14,
+  "threshold": 0.52,
+  "test_trades": 40,
+  "test_maxdd": 7.9930267333984375,
+  "test_max_consec": 1
+}
