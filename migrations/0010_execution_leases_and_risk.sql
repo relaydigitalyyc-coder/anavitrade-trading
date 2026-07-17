@@ -49,5 +49,5 @@ CREATE INDEX `execution_jobs_claim_eligibility_idx`
 CREATE INDEX `execution_jobs_lease_expiry_idx`
 	ON `execution_jobs` (`status`, `leaseAction`, `leaseExpiresAt`);
 --> statement-breakpoint
-CREATE UNIQUE INDEX `analysis_signals_external_signal_id_idx`
+CREATE UNIQUE INDEX IF NOT EXISTS `analysis_signals_external_signal_id_idx`
 	ON `analysis_signals` (`externalSignalId`);
