@@ -281,7 +281,10 @@ def simulate_structural_trade(
         exit_fill = entry_fill
     fee_r = -(round_trip_fee_bps / 10_000.0) * entry_fill / risk
     entry_ts = int(bars[entry_index]["timestamp"])
-    exit_ts = int(bars[exit_index]["timestamp"])
+    exit_bar_open_ts = int(bars[exit_index]["timestamp"])
+    # Intrabar and timeout exits are only known closed by candle close; a gap
+    # stop is executable at the open. This prevents same-open replacements.
+    exit_ts = exit_bar_open_ts if reason == "gap_stop" else exit_bar_open_ts + MS_15M
     funding_r = 0.0
     funding_events = 0
     for observation in funding_rates:
@@ -571,6 +574,7 @@ def run(args: argparse.Namespace) -> Dict:
             "fixedThreshold": threshold,
             "testEvaluations": 1,
             "modelContractDefect": "EMA helper returned after one iteration; MACD behavior preserved for feature compatibility",
+            "drawdownMethod": "realized exit events only; not marked-to-market and non-authoritative",
         },
         "rows": {
             "candidates": len(candidates), "trainAfterPurge": len(train_indices),
