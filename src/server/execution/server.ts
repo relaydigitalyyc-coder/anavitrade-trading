@@ -281,6 +281,12 @@ async function poll() {
 
           const idempotencyKey = await sha256(`vps:${conn.userId}:${intent.id}:${conn.id}`);
 
+          // ── Duplicate detection ──────────────────────────────────────────
+          if (inFlightOrders.has(idempotencyKey)) {
+            console.log(`[exec-server] Intent #${intent.id}: duplicate idempotencyKey ${idempotencyKey} already in-flight — skipping submission, poll will handle`);
+            continue;
+          }
+
           console.log(`[exec-server] Intent #${intent.id}: ${intent.side} ${intent.symbol} via ${conn.exchange} (conn #${conn.id}) [mode=${EXECUTION_MODE}]`);
 
           // ── EXECUTION_MODE guard ────────────────────────────────────────
@@ -414,6 +420,17 @@ async function poll() {
           } catch (e: any) {
             const errMsg = e?.message?.slice(0, 300) ?? "order_submission_failed";
             console.error(`[exec-server] Order submission failed for intent #${intent.id}: ${errMsg}`);
+
+            // If the exchange says "duplicate", reconcile rather than reject
+            if (isDuplicateError(errMsg)) {
+              await reconcileDuplicate(
+                idempotencyKey, conn.exchange, intent.symbol,
+                apiKey, apiSecret, passphrase, isTestnet,
+                intent, conn, notionalUsd, quantity, errMsg,
+              );
+              continue; // reconciliation already updated local state + reported
+            }
+
             ordersRejected++;
             ordersSubmitted++;
 
@@ -438,48 +455,60 @@ async function poll() {
             continue;
           }
 
-          // ── Report initial result ───────────────────────────────────────
-          await internalPost("/api/internal/report-execution", {
-            tradeIntentId: intent.id,
-            userId: conn.userId,
-            cexConnectionId: conn.id,
-            provider: conn.exchange,
-            symbol: intent.symbol,
-            side: intent.side,
-            orderType: intent.orderType,
-            notionalUsd: notionalUsd.toFixed(2),
-            quantity,
-            leverage: intent.targetLeverage ?? undefined,
-            limitPrice: intent.limitPrice ?? undefined,
-            orderId: orderResult.orderId,
-            status: orderResult.status,
-            idempotencyKey,
-          });
-
+          // ── Update local state BEFORE reporting to Worker ───────────────
+          // CRITICAL: If the report-back POST fails, the order was already
+          // placed on the exchange. We must track it locally so fill polling
+          // can recover the state on the next cycle.
           ordersSubmitted++;
 
           if (orderResult.status === "filled") {
             ordersFilled++;
             console.log(`[exec-server] Intent #${intent.id} filled immediately: ${orderResult.orderId}`);
-          } else if (orderResult.status === "accepted") {
-            // Track for fill polling (LIMIT orders or slow fills)
-            inFlightOrders.set(idempotencyKey, {
-              idempotencyKey,
-              orderId: orderResult.orderId,
-              exchange: conn.exchange,
-              symbol: intent.symbol,
+          }
+
+          // Track all non-rejected orders for fill polling
+          inFlightOrders.set(idempotencyKey, {
+            idempotencyKey,
+            orderId: orderResult.orderId,
+            exchange: conn.exchange,
+            symbol: intent.symbol,
+            userId: conn.userId,
+            cexConnectionId: conn.id,
+            tradeIntentId: intent.id,
+            submittedAt: Date.now(),
+            pollCount: 0,
+            apiKey,
+            apiSecret,
+            passphrase,
+            testnet: isTestnet,
+          });
+          ordersTracked = inFlightOrders.size;
+
+          // ── Report result to Worker (best-effort; local state is already saved) ──
+          try {
+            await internalPost("/api/internal/report-execution", {
+              tradeIntentId: intent.id,
               userId: conn.userId,
               cexConnectionId: conn.id,
-              tradeIntentId: intent.id,
-              submittedAt: Date.now(),
-              pollCount: 0,
-              apiKey,
-              apiSecret,
-              passphrase,
-              testnet: isTestnet,
+              provider: conn.exchange,
+              symbol: intent.symbol,
+              side: intent.side,
+              orderType: intent.orderType,
+              notionalUsd: notionalUsd.toFixed(2),
+              quantity,
+              leverage: intent.targetLeverage ?? undefined,
+              limitPrice: intent.limitPrice ?? undefined,
+              orderId: orderResult.orderId,
+              status: orderResult.status,
+              idempotencyKey,
             });
-            ordersTracked = inFlightOrders.size;
-            console.log(`[exec-server] Intent #${intent.id} accepted, tracking for fill: ${orderResult.orderId}`);
+          } catch (reportErr: any) {
+            // Report-back failed but local state is already saved.
+            // The pollForFills loop will pick up the inFlightOrders entry
+            // and report the fill status on the next cycle.
+            console.warn(`[exec-server] Report-back POST failed for ${orderResult.orderId} (local state saved, poll will recover): ${reportErr?.message?.slice(0, 100)}`);
+            errorsTotal++;
+            lastError = reportErr?.message ?? String(reportErr);
           }
         } catch (e: any) {
           errorsTotal++;
@@ -499,6 +528,121 @@ async function poll() {
     console.error("[exec-server] Poll error:", e?.message);
     lastPollDuration = Date.now() - start;
   }
+}
+
+/** Error message patterns that indicate a duplicate / already-existing order. */
+function isDuplicateError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("duplicate order") ||
+    lower.includes("order already exists") ||
+    lower.includes("already placed") ||
+    lower.includes("duplicate client order id") ||
+    lower.includes("client order id already") ||
+    lower.includes("order would immediately reduce")
+  );
+}
+
+/**
+ * When the exchange rejects with a "duplicate order" error, query the
+ * exchange for existing position state instead of treating it as rejected.
+ *
+ * - If a position exists -> report as filled (the original order completed).
+ * - If no position  -> track in inFlightOrders for fill polling.
+ */
+async function reconcileDuplicate(
+  idempotencyKey: string,
+  exchange: string,
+  symbol: string,
+  apiKey: string,
+  apiSecret: string,
+  passphrase: string | undefined,
+  testnet: boolean,
+  intent: PendingIntent,
+  conn: EncryptedConnection,
+  notionalUsd: number,
+  quantity: string,
+  errMsg: string,
+): Promise<void> {
+  console.log(`[exec-server] Reconciling duplicate for ${idempotencyKey} on ${exchange}:${symbol}`);
+
+  const syntheticOrderId = `reconciled:${idempotencyKey}`;
+  let foundPosition = false;
+
+  try {
+    const client = createCexClient(exchange, { apiKey, apiSecret, passphrase, testnet });
+    const positions = await client.getPositions(symbol);
+    const position = positions.find((p) => p.symbol === symbol);
+
+    if (position && Math.abs(position.sizeSigned) > 0) {
+      foundPosition = true;
+      ordersFilled++;
+      ordersSubmitted++;
+
+      // Track briefly so pollForFills can confirm, then auto-remove
+      inFlightOrders.set(idempotencyKey, {
+        idempotencyKey,
+        orderId: syntheticOrderId,
+        exchange,
+        symbol,
+        userId: conn.userId,
+        cexConnectionId: conn.id,
+        tradeIntentId: intent.id,
+        submittedAt: Date.now(),
+        pollCount: MAX_ORDER_POLLS - 1, // near-expired so poll cleans up fast
+        apiKey,
+        apiSecret,
+        passphrase,
+        testnet,
+      });
+      ordersTracked = inFlightOrders.size;
+
+      await internalPost("/api/internal/report-execution", {
+        tradeIntentId: intent.id,
+        userId: conn.userId,
+        cexConnectionId: conn.id,
+        provider: exchange,
+        symbol,
+        side: intent.side,
+        orderType: intent.orderType,
+        notionalUsd: notionalUsd.toFixed(2),
+        quantity,
+        leverage: intent.targetLeverage ?? undefined,
+        limitPrice: intent.limitPrice ?? undefined,
+        orderId: syntheticOrderId,
+        status: "filled",
+        errorMessage: `reconciled_duplicate: ${errMsg.slice(0, 100)}`,
+        idempotencyKey,
+      });
+      console.log(`[exec-server] Duplicate reconciled as filled: ${symbol} size=${position.sizeSigned}`);
+      return;
+    }
+  } catch (e: any) {
+    console.warn(`[exec-server] Position check during reconciliation failed: ${e?.message?.slice(0, 100)}`);
+  }
+
+  // No position found — order may still be pending (LIMIT order resting).
+  // Track for fill polling so we don't lose it.
+  ordersSubmitted++;
+
+  inFlightOrders.set(idempotencyKey, {
+    idempotencyKey,
+    orderId: syntheticOrderId,
+    exchange,
+    symbol,
+    userId: conn.userId,
+    cexConnectionId: conn.id,
+    tradeIntentId: intent.id,
+    submittedAt: Date.now(),
+    pollCount: 0,
+    apiKey,
+    apiSecret,
+    passphrase,
+    testnet,
+  });
+  ordersTracked = inFlightOrders.size;
+
+  console.log(`[exec-server] Duplicate order reconciled, tracking for fill: ${symbol}${foundPosition ? " (position found)" : ""}`);
 }
 
 /**

@@ -311,6 +311,7 @@ export const executionJobs = sqliteTable("execution_jobs", {
   asterAgentAccountId: integer({ mode: "number" }),
   cexConnectionId: integer({ mode: "number" }),
   provider: text().default("aster").notNull(),
+  riskApproved: integer({ mode: "boolean" }).default(false).notNull(),
   symbol: text().notNull(),
   side: text().notNull(),
   orderType: text().default("market").notNull(),

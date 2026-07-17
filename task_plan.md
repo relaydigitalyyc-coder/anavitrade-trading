@@ -59,7 +59,7 @@
 npx wrangler d1 execute anavitrade-db --remote --command "SELECT COUNT(*) FROM klines"
 
 # Trigger analysis after klines exist
-curl -s -H "x-admin-api-key: anavitrade-admin-key-2026-secure" -X POST \
+curl -s -H "x-admin-api-key: [REDACTED — set via wrangler secret]" -X POST \
   "https://anavitrade-trading.erhazeariel.workers.dev/api/analysis/run"
 
 # Check VPS execution server

@@ -57,6 +57,13 @@
       "when": 1786400000000,
       "tag": "0007_demo_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1752768000000,
+      "tag": "0008_ml_inferences",
+      "breakpoints": true
     }
   ]
 }

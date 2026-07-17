@@ -146,6 +146,7 @@ async function fanOutCex(
       side: intent.side,
       orderType: intent.orderType,
       status: "queued",
+      riskApproved: true,
       idempotencyKey: idem,
     } as any).onConflictDoNothing();
 
