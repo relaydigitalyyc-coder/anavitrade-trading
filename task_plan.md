@@ -68,3 +68,15 @@ curl http://5.161.229.209:9090/health
 # Seed 1h klines (SMC patterns fire 4x more)
 node scripts/seed-klines.mjs --pairs 10 --bars 300 --timeframe 1h
 ```
+
+## Orchestration Run — 2026-07-16 (Unified Algo PRD Phase 0 + 1)
+
+PRD: docs/prd/2026-07-16-unified-algo-development-integration.md
+Pattern: task-farm (Codex workers + Claude Opus agents, strict file ownership)
+
+| Workstream | Owner | Files owned |
+|---|---|---|
+| R0.3 calibrator port + R0.4 featurizer parity test | Codex swarm (2 workers) | src/server/ml/inference-router.ts, scripts/ml/infer.py, scripts/ml/tests/* (new) |
+| R1.1 unified gate + R1.3 fail-closed dispatch | Opus agent A | src/server/signals/unified-engine.ts, src/server/execution/dispatch.ts, src/drizzle/schema.ts |
+| R1.2 exit policy (swing-pivot stop + 5ATR ratchet) | Opus agent B | src/server/analysis/exits/* |
+| R0.1 extended kline dataset (≥120d, 50 pairs, 3 TFs) | Opus agent C | scripts/data/* (data only, no src changes) |

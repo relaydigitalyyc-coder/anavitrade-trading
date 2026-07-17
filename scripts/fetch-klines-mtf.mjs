@@ -23,6 +23,16 @@ const BINANCE_FUTURES = 'https://fapi.binance.com';
 
 const TIMEFRAMES = ['4h', '1h', '15m'];
 
+/** Milliseconds per timeframe interval — used for pagination + gap detection. */
+const INTERVAL_MS = {
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
+};
+
+/** Binance caps a single klines request at 1000 bars. */
+const MAX_KLINES_PER_REQ = 1000;
+
 /** Binance API key from env — helps bypass geo-block on VPS with static US IP. */
 const BINANCE_API_KEY = process.env.BINANCE_API_KEY?.trim() || "";
 
@@ -86,12 +96,13 @@ async function fetchTopPairs(limit = 50) {
 // Fetch klines for a single symbol + interval
 // ═══════════════════════════════════════════════════════════
 
-async function fetchKlines(symbol, interval, limit = 500) {
+async function fetchKlines(symbol, interval, limit = 500, startTime = null) {
   const params = new URLSearchParams({
     symbol,
     interval,
     limit: String(limit),
   });
+  if (startTime != null) params.set('startTime', String(startTime));
   const headers = BINANCE_API_KEY ? { "X-MBX-APIKEY": BINANCE_API_KEY } : {};
   const url = `${BINANCE_SPOT}/api/v3/klines?${params}`;
   const res = await fetch(url, { headers });
@@ -107,15 +118,68 @@ async function fetchKlines(symbol, interval, limit = 500) {
   }));
 }
 
+/**
+ * Fetch a long window of klines by paginating with startTime.
+ * Binance returns at most 1000 bars per request, so we walk forward from
+ * `startMs` until we reach the present, de-duplicating on open timestamp.
+ * Respects rate limits via `delayMs` between page requests.
+ */
+async function fetchKlinesPaginated(symbol, interval, startMs, delayMs) {
+  const step = INTERVAL_MS[interval];
+  if (!step) throw new Error(`Unknown interval ${interval}`);
+
+  const seen = new Set();
+  const out = [];
+  let cursor = startMs;
+  const nowMs = Date.now();
+
+  // Hard cap on pages to avoid runaway loops on API misbehaviour.
+  const maxPages = Math.ceil((nowMs - startMs) / (step * MAX_KLINES_PER_REQ)) + 5;
+  let pages = 0;
+
+  while (cursor < nowMs && pages < maxPages) {
+    const batch = await fetchKlines(symbol, interval, MAX_KLINES_PER_REQ, cursor);
+    pages++;
+    if (batch.length === 0) break;
+
+    let added = 0;
+    for (const bar of batch) {
+      if (!seen.has(bar.timestamp)) {
+        seen.add(bar.timestamp);
+        out.push(bar);
+        added++;
+      }
+    }
+
+    const lastTs = batch[batch.length - 1].timestamp;
+    // Advance strictly past the last open time we received.
+    const nextCursor = lastTs + step;
+    if (nextCursor <= cursor) break; // no forward progress — stop
+    cursor = nextCursor;
+
+    // If the API returned fewer than a full page, we've caught up to the tip.
+    if (batch.length < MAX_KLINES_PER_REQ) break;
+    if (added === 0) break;
+
+    await sleep(delayMs);
+  }
+
+  out.sort((a, b) => a.timestamp - b.timestamp);
+  return out;
+}
+
 // ═══════════════════════════════════════════════════════════
 // Fetch all 3 timeframes for one pair (serial, rate-limited)
 // ═══════════════════════════════════════════════════════════
 
-async function fetchPairMTF(symbol, bars, delayMs) {
+async function fetchPairMTF(symbol, bars, delayMs, days = 0) {
   const klines = {};
+  const startMs = days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
 
   for (const tf of TIMEFRAMES) {
-    const raw = await fetchKlines(symbol, tf, bars);
+    const raw = days > 0
+      ? await fetchKlinesPaginated(symbol, tf, startMs, delayMs)
+      : await fetchKlines(symbol, tf, bars);
     klines[tf] = raw;
     // Respect rate limit between each request
     if (tf !== TIMEFRAMES[TIMEFRAMES.length - 1]) {
@@ -154,13 +218,22 @@ async function main() {
   const delayMs = parseInt(
     args.includes('--delay') ? args[args.indexOf('--delay') + 1] : '150',
   );
+  const days = parseInt(
+    args.includes('--days') ? args[args.indexOf('--days') + 1] : '0',
+  );
 
   const outDir = join(__dirname, 'data');
-  const outPath = join(outDir, 'klines-mtf.json');
+  const outFile = args.includes('--out')
+    ? args[args.indexOf('--out') + 1]
+    : 'klines-mtf.json';
+  // Allow --out to be an absolute path or a filename relative to scripts/data.
+  const outPath = outFile.startsWith('/') ? outFile : join(outDir, outFile);
 
   console.log('═'.repeat(60));
   console.log(
-    `MTF Kline Fetcher — ${TIMEFRAMES.join('/')}, ${bars} bars, ${pairsCount} pairs`,
+    days > 0
+      ? `MTF Kline Fetcher — ${TIMEFRAMES.join('/')}, ${days} days (paginated), ${pairsCount} pairs`
+      : `MTF Kline Fetcher — ${TIMEFRAMES.join('/')}, ${bars} bars, ${pairsCount} pairs`,
   );
   console.log(`Rate limit: ${delayMs}ms between requests`);
   console.log(`Estimated time: ~${Math.ceil((pairsCount * TIMEFRAMES.length * delayMs) / 1000)}s`);
@@ -183,7 +256,7 @@ async function main() {
   for (let i = 0; i < pairs.length; i++) {
     const sym = pairs[i];
     try {
-      const entry = await fetchPairMTF(sym, bars, delayMs);
+      const entry = await fetchPairMTF(sym, bars, delayMs, days);
       data.push(entry);
       fetched++;
 

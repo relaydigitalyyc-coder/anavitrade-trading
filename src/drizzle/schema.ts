@@ -557,6 +557,10 @@ export const mlInferences = sqliteTable("ml_inferences", {
   decision: text().notNull(),
   regime: text().notNull(),
   featureVectorJson: text(),
+  /* Failing gate name from the ordered dispatch gate (PRD R1.1), or "passed".
+   * One of: passed | universe | tier_b_paper | tier_c_reject | rsi_extension |
+   * ml | ml_unreachable. Nullable for pre-gate historical rows. */
+  gateResult: text("gate_result"),
   createdAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
 });
 

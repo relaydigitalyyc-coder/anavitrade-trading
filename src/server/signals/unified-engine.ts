@@ -1067,3 +1067,24 @@ export class UnifiedEngine {
 
 export type { SignalGate, TreeGatedSignal, TreeGateEngine, TreeGateFeatures } from "./tree-gate-engine";
 export { treeGateEngine, treeGateEvaluate } from "./tree-gate-engine";
+
+/* ─── Dispatch Gate — the single ordered decision layer (PRD R1.1 / R1.3) ──
+ * All trade dispatch flows through this gate. The implementation lives in the
+ * focused ./dispatch-gate.ts module (kept pure + small per coding-style); it is
+ * re-exported here so unified-engine.ts remains the canonical decision-layer
+ * entry point referenced by the execution dispatch path. */
+
+export type {
+  GateInput,
+  GateDecision,
+  GateResult,
+  GateDirection,
+} from "./dispatch-gate";
+export {
+  evaluateDispatchGate,
+  GATE_CONFIG,
+  ML_THRESHOLD,
+  computeAtrPct,
+  computeRsi14,
+  isBullRegime,
+} from "./dispatch-gate";
