@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backtest Dashboard - Anavitrade</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js" crossorigin></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "htm": "https://esm.sh/htm@3.1.1"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #0b0b12;
+      color: #e2e8f0;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    #root { min-height: 100vh; }
+
+    /* Glass card */
+    .glass {
+      background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .glass-strong {
+      background: rgba(18,18,30,0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    /* Table styles */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: #14141f;
+    }
+    .tbl th:hover { color: #bbb; }
+    .tbl td {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      font-size: 0.825rem;
+      white-space: nowrap;
+    }
+    .tbl tr:hover td { background: rgba(255,255,255,0.02); }
+    .tbl tr.highlight td {
+      background: rgba(34,197,94,0.08);
+      border-bottom-color: rgba(34,197,94,0.15);
+    }
+    .tbl tr.best-pf td {
+      background: rgba(59,130,246,0.08);
+      border-bottom-color: rgba(59,130,246,0.15);
+    }
+
+    /* Sort arrow */
+    .sort-arrow { display: inline-block; width: 16px; color: #555; margin-left: 4px; }
+    .sort-arrow.active { color: #22c55e; }
+    .sort-arrow::after { content: '\25B4\25BE'; letter-spacing: -2px; }
+
+    /* Value colors */
+    .val-pos { color: #22c55e; }
+    .val-neg { color: #ef4444; }
+    .val-neutral { color: #94a3b8; }
+    .val-highlight { color: #facc15; }
+
+    /* Loading spinner */
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.06);
+      border-top-color: #22c55e;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Equity chart container */
+    .chart-container { width: 100%; height: 400px; }
+    .chart-container > div { border-radius: 8px; }
+
+    /* Feature bar */
+    .feat-bar { transition: width 0.6s ease-out; }
+
+    /* Pagination */
+    .page-btn {
+      padding: 0.4rem 0.75rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      color: #e2e8f0;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .page-btn:hover { background: rgba(255,255,255,0.08); }
+    .page-btn.active { background: rgba(34,197,94,0.15); border-color: #22c55e; }
+    .page-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* Responsive card grid */
+    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 1024px) { .card-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .card-grid { grid-template-columns: 1fr; } }
+
+    /* Stat value */
+    .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+    .stat-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.25rem; }
+
+    /* Container */
+    .container { max-width: 1440px; margin: 0 auto; padding: 0 1.5rem; }
+    @media (max-width: 640px) { .container { padding: 0 1rem; } }
+
+    /* Scrollable table wrapper */
+    .table-wrap { overflow-x: auto; }
+
+    /* Header highlight stripe */
+    .accent-stripe { height: 3px; background: linear-gradient(90deg, #22c55e, #3b82f6); border-radius: 2px; }
+
+    /* Regime card */
+    .regime-card { text-align: center; padding: 1.25rem; }
+
+    /* Tooltip for best threshold */
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-green { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .badge-blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./dashboard.js"></script>
+</body>
+</html>

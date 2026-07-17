@@ -27,6 +27,13 @@ export type TradeIntentInput = {
   period?: string; // timeframe from coinlegs signals (e.g. "4h", "15m", "1d")
 };
 
+/** Kelly criterion parameters from backtest corpus (ICT Sniper rule-based:
+ *  694 trades, 68% WR, avg win 2.39R, avg loss -1.0R).
+ *  Produces a full-Kelly fraction of ~0.55, quarter-Kelly cap = 0.25. */
+const KNOWN_WIN_RATE = 0.68;
+const KNOWN_AVG_WIN_R = 2.39;
+const KNOWN_AVG_LOSS_R = 1.0;
+
 /** Timeframe-based risk multipliers derived from 1,265-trade backtest.
  *  4h signals have 70.7% WR → 2.0x position size for maximum returns.
  *  15m signals have 60.8% WR → 0.75x to reduce noise exposure. */
@@ -177,7 +184,7 @@ export async function prefetchUserData(userIds: number[]): Promise<PrefetchedUse
 export async function decideExecution(
   intent: TradeIntentInput,
   userId: number,
-  connection: Pick<CexConnectionRow, "status" | "copytradeEnabled" | "killSwitchActive">,
+  connection: Pick<CexConnectionRow, "id" | "status" | "copytradeEnabled" | "killSwitchActive" | "consecutiveLosses" | "circuitBreakerUntil" | "highWaterMark">,
   preloaded?: PrefetchedUserData,
 ): Promise<RiskDecision> {
   // DB-backed kill switch (with hot-path cache)
@@ -185,6 +192,11 @@ export async function decideExecution(
   if (connection.status !== "active") return { approved: false, reason: "connection_not_active" };
   if (!connection.copytradeEnabled) return { approved: false, reason: "copytrade_disabled" };
   if (connection.killSwitchActive) return { approved: false, reason: "kill_switch_active" };
+  // Circuit breaker: pause trading for 24h after 5 consecutive losing trades
+  if (connection.circuitBreakerUntil) {
+    const cbUntil = new Date(connection.circuitBreakerUntil).getTime();
+    if (cbUntil > Date.now()) return { approved: false, reason: "circuit_breaker_active" };
+  }
 
   const db = getDb();
 
@@ -205,10 +217,14 @@ export async function decideExecution(
   const maxPositionPct = parseFloat(account.maxPositionSizePct ?? "10");
   const maxDailyLossPct = parseFloat(account.maxDailyLossPct ?? "5.00");
 
+  // Cap per-trade max risk at 1% (overrides account maxPositionSizePct default of 10%).
+  // This caps single-trade drawdown at ~15% with leverage < 15x.
+  const basePositionPct = Math.min(maxPositionPct, 1.0);
+
   // Apply timeframe-based risk multiplier from backtest results.
   // Defaults to 1.0 for legacy intents without a period.
   const tfMultiplier = TF_RISK_MULTIPLIER[intent.period ?? ""] ?? 1.0;
-  const effectivePositionPct = maxPositionPct * tfMultiplier;
+  const effectivePositionPct = basePositionPct * tfMultiplier;
 
   const requestedLeverage = intent.targetLeverage ?? 3;
   const leverage = Math.min(requestedLeverage, maxLeverage);
@@ -277,10 +293,17 @@ export async function decideExecution(
 
   const availableEquity = latestNav ? parseFloat(latestNav.accountEquityUsd) : 0;
 
+  // ── Drawdown-aware Kelly sizing ──
+  // Uses backtest-derived metrics (ICT Sniper rule-based: 68% WR, 694 trades).
+  const kellyFactor = computeKellySize(KNOWN_WIN_RATE, KNOWN_AVG_WIN_R, KNOWN_AVG_LOSS_R);
+  const hwm = parseFloat(connection.highWaterMark ?? "0");
+  const ddFactor = computeDrawdownFactor(latestNav ?? undefined, hwm);
+
   if (availableEquity > 0) {
-    const proposedNotional = requestedNotional > 0
+    const baseNotional = requestedNotional > 0
       ? requestedNotional
       : sizeNotionalFromEquity(availableEquity, effectivePositionPct);
+    const proposedNotional = baseNotional * kellyFactor * ddFactor;
 
     const projectedExposurePct =
       ((totalOpenNotional + proposedNotional) / availableEquity) * 100;
@@ -293,10 +316,49 @@ export async function decideExecution(
     }
   }
 
-  return { approved: true, notionalUsd: requestedNotional, leverage };
+  // When no explicit requestedNotional is provided, compute sizing from equity
+  // with Kelly + drawdown adjustments baked in so callers don't bypass risk controls.
+  const notionalUsd = requestedNotional > 0
+    ? requestedNotional * kellyFactor * ddFactor
+    : (availableEquity > 0
+      ? sizeNotionalFromEquity(availableEquity, effectivePositionPct) * kellyFactor * ddFactor
+      : 0);
+
+  return { approved: true, notionalUsd, leverage };
 }
 
 /** Position size from account equity + the user's max position-size cap. */
 export function sizeNotionalFromEquity(equityUsd: number, maxPositionPct: number): number {
   return Math.max(0, equityUsd * (maxPositionPct / 100));
+}
+
+/** Kelly criterion fraction of equity to risk, given backtested win metrics.
+ *  Returns 0 if edge is negative — no bet. Capped at 0.25 (quarter-Kelly)
+ *  to reduce sequence-of-returns risk from the full-Kelly formula. */
+export function computeKellySize(winRate: number, avgWin: number, avgLoss: number): number {
+  if (avgWin <= 0 || avgLoss <= 0) return 0;
+  // Full Kelly: f = (p * W - (1-p) * L) / (W * L)  but using standard binary-outcome form:
+  // f = p - (q / b)  where b = avgWin / avgLoss
+  const b = avgWin / avgLoss;
+  const fullKelly = winRate - ((1 - winRate) / b);
+  if (fullKelly <= 0) return 0;
+  // Cap at 25% of equity (quarter-Kelly for safety)
+  return Math.min(fullKelly, 0.25);
+}
+
+/** Returns a drawdown-aware multiplier for Kelly sizing.
+ *  - At or above HWM: 1.0 (full Kelly)
+ *  - Below HWM: equity/HWM (proportional reduction)
+ *  - Floor: 0.25 (never reduce below 25% of Kelly) */
+export function computeDrawdownFactor(
+  latestNav: { accountEquityUsd: string } | null | undefined,
+  highWaterMark: number,
+): number {
+  if (!latestNav) return 1.0;
+  const equity = parseFloat(latestNav.accountEquityUsd);
+  if (!Number.isFinite(equity) || equity <= 0) return 1.0;
+  if (!Number.isFinite(highWaterMark) || highWaterMark <= 0) return 1.0;
+  if (equity >= highWaterMark) return 1.0;
+  const factor = equity / highWaterMark;
+  return Math.max(0.25, factor);
 }

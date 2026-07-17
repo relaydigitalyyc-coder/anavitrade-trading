@@ -1,12 +1,12 @@
-"""LightGBM training + isotonic calibration + adversarial risk model.
+"""LightGBM training + Platt calibration + adversarial risk model.
 
 Trains on feature dicts + labels → produces calibrated P(win) predictions.
-The isotonic calibration IS the decision threshold — no arbitrary scoring."""
+Uses Platt scaling (sigmoid) instead of isotonic to avoid probability collapse."""
 
 import json, pickle, numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple
-from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, roc_auc_score
 import lightgbm as lgb
 
@@ -54,14 +54,28 @@ def train_chronological(rows: List[Dict], cfg: PipelineConfig = DEFAULT) -> Dict
     )
     clf.fit(X_t, y_t)
 
-    # Calibrate
+    # Calibrate via Platt scaling (sigmoid) — avoids isotonic collapse
     probs_cal = clf.predict_proba(X_cal)[:, 1]
-    calibrator = IsotonicRegression(y_min=0, y_max=1, out_of_bounds='clip')
-    calibrator.fit(probs_cal, y_cal)
+    platt = LogisticRegression(C=1.0, class_weight='balanced', random_state=42)
+    platt.fit(probs_cal.reshape(-1, 1), y_cal)
 
     # Score test set
     probs_raw = clf.predict_proba(X_test)[:, 1]
-    probs_calibrated = calibrator.predict(probs_raw)
+    probs_calibrated = platt.predict_proba(probs_raw.reshape(-1, 1))[:, 1]
+
+    # Calibration quality check — ensure isotonic-like squash hasn't occurred
+    probs_unique = len(np.unique(np.round(probs_calibrated, 1)))
+    if probs_unique < 3:
+        print(f"WARNING: Calibration collapsed — only {probs_unique} unique probability deciles")
+        print("Falling back to raw model probabilities")
+        probs_calibrated = probs_raw.copy()
+
+    # Minimum pass-rate gap check — ensure calibration actually shifts predictions
+    diff_frac = np.mean(np.abs(probs_calibrated - probs_raw) > 0.1)
+    if diff_frac < 0.1:
+        print(f"WARNING: Calibration changed only {diff_frac*100:.1f}% of predictions by >0.1")
+        print("Falling back to raw model probabilities")
+        probs_calibrated = probs_raw.copy()
 
     auc = roc_auc_score(y_test, probs_calibrated)
     brier = brier_score_loss(y_test, probs_calibrated)
@@ -95,7 +109,7 @@ def train_chronological(rows: List[Dict], cfg: PipelineConfig = DEFAULT) -> Dict
     adv.fit(X_train, y_adv[:len(X_train)])
 
     return {
-        'classifier': clf, 'calibrator': calibrator, 'adversary': adv,
+        'classifier': clf, 'calibrator': platt, 'adversary': adv,
         'feature_names': feature_names,
         'best_threshold': best_t,
         'test_auc': auc, 'test_brier': brier,

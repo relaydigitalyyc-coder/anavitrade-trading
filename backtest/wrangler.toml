@@ -1,0 +1,9 @@
+# ============================================================
+# Cloudflare Pages config for the standalone Backtest Dashboard
+# This is a SEPARATE project from the main Anavitrade app.
+# ============================================================
+name = "anavitrade-backtest-dashboard"
+pages_build_output_dir = "."
+
+[env.production]
+vars = { FOUNDER_KEY = "anavitrade-founder-2026" }

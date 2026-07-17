@@ -318,9 +318,13 @@ async function fanOutAster(
     }
 
     const decision = await decideExecution(intent, agent.userId, {
+      id: 0, // Aster agents do not have a cexConnection
       status: "active",
       copytradeEnabled: true,
       killSwitchActive: false,
+      consecutiveLosses: 0,
+      circuitBreakerUntil: null,
+      highWaterMark: null,
     }, preloaded);
     if (decision.approved !== true) {
       const reason = "reason" in decision ? decision.reason : "unknown";

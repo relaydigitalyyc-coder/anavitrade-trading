@@ -271,6 +271,9 @@ export const cexConnections = sqliteTable("cex_connections", {
   lastBalanceUsd: text(),
   lastValidatedAt: integer({ mode: "timestamp_ms" }),
   revokedAt: integer({ mode: "timestamp_ms" }),
+  consecutiveLosses: integer({ mode: "number" }).default(0).notNull(),
+  circuitBreakerUntil: text(),  // ISO timestamp, nullable — set when consecutiveLosses reaches threshold
+  highWaterMark: text(),        // decimal string, nullable — highest NAV observed for drawdown factor
   createdAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
   updatedAt: integer({ mode: "timestamp_ms" }).$default(() => new Date()).notNull(),
 });
