@@ -79,14 +79,22 @@ export default function AsterOnboarding() {
       const signature = await signAsterRegistrationTypedData({
         provider: provider as Parameters<typeof signAsterRegistrationTypedData>[0]["provider"],
         account: signingAddress as `0x${string}`,
+        signatureChainId: challenge.signatureChainId,
         typedData: challenge.typedData,
       });
       await completeRegistration.mutateAsync({
+        activationMode: challenge.activationMode,
+        endpoint: challenge.endpoint,
+        signatureChainId: challenge.signatureChainId,
         params: challenge.params,
         signature,
       });
     } catch (e: any) {
-      toast.error(e?.message || "Failed to activate Aster.");
+      const message = String(e?.message ?? "");
+      const chainRefusal = /chainId should be same as current chainId|wallet_switchEthereumChain|typed data/i.test(message);
+      toast.error(chainRefusal
+        ? "Your wallet refused the Aster signing domain. Switch to a wallet/account that supports Aster typed-data signing and try again."
+        : message || "Failed to activate Aster.");
     }
   };
 

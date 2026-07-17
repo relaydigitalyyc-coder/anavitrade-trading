@@ -18,6 +18,7 @@ export function getAsterConfig() {
     defaultFeeRate: env.ASTER_DEFAULT_FEE_RATE ?? DEFAULT_ASTER_FEE_RATE,
     environment,
     asterChain: env.ASTER_CHAIN ?? (environment === "testnet" ? "Testnet" : "Mainnet"),
+    // Aster Code management domain: 1666 production, 714 testnet.
     codeSigningChainId: parseSigningChainId(env.ASTER_CODE_SIGNING_CHAIN_ID, defaultSigningChainId),
     includeCompatParams: env.ASTER_INCLUDE_COMPAT_PARAMS === "true",
     liveOrderSubmissionEnabled: env.ASTER_LIVE_ORDER_SUBMISSION_ENABLED === "true",

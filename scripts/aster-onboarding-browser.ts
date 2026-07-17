@@ -10,6 +10,7 @@ const now = Date.now();
 const email = process.env.ASTER_BROWSER_EMAIL ?? `aster-browser+${now}@anavitrade.test`;
 const privateKey = (process.env.ASTER_BROWSER_WALLET_PRIVATE_KEY ?? generatePrivateKey()) as `0x${string}`;
 const account = privateKeyToAccount(privateKey);
+const expectedSignatureChainId = Number(process.env.ASTER_BROWSER_SIGNATURE_CHAIN_ID ?? "1666");
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,7 +32,7 @@ async function installInjectedWallet(page: Page) {
     });
   });
 
-  await page.addInitScript(({ address }) => {
+  await page.addInitScript(({ address, signatureChainId }) => {
     const listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
     const emit = (event: string, ...args: unknown[]) => {
       for (const fn of listeners[event] ?? []) fn(...args);
@@ -48,7 +49,11 @@ async function installInjectedWallet(page: Page) {
       removeListener(event: string, cb: (...args: unknown[]) => void) {
         listeners[event] = (listeners[event] ?? []).filter((fn) => fn !== cb);
       },
+      rpcCalls: [] as Array<{ method: string; params?: unknown[] }>,
+      lastAsterSignature: null as string | null,
+      lastAsterTypedData: null as unknown,
       async request(args: { method: string; params?: unknown[] }) {
+        provider.rpcCalls.push(args);
         switch (args.method) {
           case "eth_requestAccounts":
             emit("accountsChanged", [address]);
@@ -63,13 +68,21 @@ async function installInjectedWallet(page: Page) {
             return [{ parentCapability: "eth_accounts" }];
           case "wallet_switchEthereumChain":
           case "wallet_addEthereumChain":
-            return null;
+            throw new Error("Aster activation must not switch wallet chains");
           case "personal_sign":
             throw new Error("personal_sign is not supported by the test wallet");
           case "eth_signTypedData_v4": {
             const params = args.params ?? [];
             const payload = typeof params[1] === "string" ? params[1] : JSON.stringify(params[1]);
-            return (window as any).__anaviSignTypedData(payload);
+            const typedData = JSON.parse(payload);
+            if (provider.chainId !== "0x1") throw new Error("Injected wallet chain drifted during Aster signing");
+            if (typedData.domain?.chainId !== signatureChainId) throw new Error("Aster typed-data chainId was not " + signatureChainId);
+            if (typedData.primaryType !== "ApproveAgent") throw new Error("Aster activation did not sign ApproveAgent");
+            if (typedData.message?.CanWithdraw !== false) throw new Error("Aster activation must not request withdrawals");
+            provider.lastAsterTypedData = typedData;
+            const signature = await (window as any).__anaviSignTypedData(payload);
+            provider.lastAsterSignature = signature;
+            return signature;
           }
           default:
             throw new Error(`Unsupported injected wallet method: ${args.method}`);
@@ -85,7 +98,7 @@ async function installInjectedWallet(page: Page) {
       value: address,
       configurable: true,
     });
-  }, { address: account.address });
+  }, { address: account.address, signatureChainId: expectedSignatureChainId });
 }
 
 async function main() {
@@ -152,6 +165,22 @@ async function main() {
     ]);
     await sleep(1000);
     await screenshot(page, "05-after-activation.png");
+
+    const walletProof = await page.evaluate(() => {
+      const ethereum = (window as any).ethereum;
+      return {
+        rpcCalls: ethereum.rpcCalls,
+        lastAsterSignature: ethereum.lastAsterSignature,
+        lastAsterTypedData: ethereum.lastAsterTypedData,
+      };
+    });
+    const signingCalls = walletProof.rpcCalls.filter((call: { method: string }) => call.method === "eth_signTypedData_v4");
+    if (signingCalls.length !== 1) throw new Error("Expected exactly one Aster typed-data signature, got " + signingCalls.length);
+    if (!walletProof.lastAsterSignature) throw new Error("Aster signature was not captured");
+    if ((walletProof.lastAsterTypedData as any)?.domain?.chainId !== expectedSignatureChainId) throw new Error("Captured Aster typed-data chainId mismatch");
+    if (walletProof.rpcCalls.some((call: { method: string }) => ["wallet_switchEthereumChain", "wallet_addEthereumChain", "personal_sign", "eth_signTypedData", "eth_signTypedData_v3"].includes(call.method))) {
+      throw new Error("Aster activation used a forbidden wallet method");
+    }
 
     const body = await page.locator("body").innerText();
     const active = /Already Active|Activated! Redirecting|Active\s*.\s*ready/i.test(body);

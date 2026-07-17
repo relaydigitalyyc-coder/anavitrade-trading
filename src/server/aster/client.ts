@@ -161,13 +161,15 @@ export class AsterApiClient {
   async approveAgent(
     params: AsterAgentRegistrationParams,
     signature: string,
+    signatureChainId = getAsterConfig().codeSigningChainId,
   ): Promise<unknown> {
     const queryParams = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) queryParams.set(key, String(value));
     }
     queryParams.set("signature", signature);
-    queryParams.set("signatureChainId", String(getAsterConfig().codeSigningChainId));
+    // Aster Code management currently requires this alongside the EIP-712 domain chain.
+    queryParams.set("signatureChainId", String(signatureChainId));
 
     const response = await fetch(`${this.baseUrl}/fapi/v3/approveAgent?${queryParams.toString()}`, {
       method: "POST",

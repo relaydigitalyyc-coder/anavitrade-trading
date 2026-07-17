@@ -153,6 +153,9 @@ export type AsterAgentRegistrationParams = {
   nonce: number;
 };
 
+export type AsterAgentActivationMode = "approveAgentWithBuilder";
+export type AsterAgentActivationEndpoint = "/fapi/v3/approveAgent";
+
 export type AsterManagementTypedData = {
   domain: {
     name: "AsterSignTransaction";
@@ -166,6 +169,9 @@ export type AsterManagementTypedData = {
 };
 
 export type AsterAgentRegistrationChallenge = {
+  activationMode: AsterAgentActivationMode;
+  endpoint: AsterAgentActivationEndpoint;
+  signatureChainId: number;
   params: AsterAgentRegistrationParams;
   typedData: AsterManagementTypedData;
 };

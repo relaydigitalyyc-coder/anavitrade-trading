@@ -16,6 +16,7 @@
     "deploy:dry": "wrangler deploy --dry-run",
     "db:migrate": "wrangler d1 execute anavitrade-db --file=./migrations/001_init.sql",
     "aster:smoke-contract": "tsx scripts/aster-contract-smoke.ts",
+    "aster:smoke-browser": "tsx scripts/aster-onboarding-browser.ts",
     "aster:live-proof": "tsx scripts/aster-live-proof.ts"
   },
   "dependencies": {
