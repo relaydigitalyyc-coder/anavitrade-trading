@@ -2,3 +2,16 @@
 output/
 .workstream*
 scripts/ml/tests/_test_*_tmp.py
+scripts/
+icr_strategy/
+backtest/
+e2e-artifacts/
+docs/
+migrations/
+tests/
+_manus/
+.agents/
+.claude/
+.codex/
+.gstack/
+.wrangler/
