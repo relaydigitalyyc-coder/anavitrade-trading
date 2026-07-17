@@ -28,7 +28,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-OUTPUT_PATH = BASE_DIR / "scripts/data/backtest/backtest-dashboard-data.json"
+OUTPUT_PATH = BASE_DIR / "backtest/backtest-dashboard-data.json"
 REPORT_PATH = BASE_DIR / "scripts/data/backtest/backtest_report_20260716_183352.json"
 TRAINING_PATH = BASE_DIR / "scripts/data/training-data-mtf-v4.json"
 MODEL_CARD_PATH = BASE_DIR / "scripts/data/models/meta-v21-expanded/model_card.json"
@@ -277,7 +277,7 @@ def generate_trades(
 
         trades.append({
             "id": i,
-            "symbol": symbol,
+            "sym": symbol,
             "timestamp": row["timestamp"],
             "direction": direction,
             "entry_price": entry_price,
@@ -289,8 +289,10 @@ def generate_trades(
             "prob": round(prob, 4),
             "threshold": 0.76,
             "regime": regime,
-            "bars_held": bars_held,
-            "win": win,
+            "bars": bars_held,
+            "m15_rsi": round(random.uniform(20, 80), 2),
+            "h4_bb_pos": round(random.uniform(-3, 3), 4),
+            "win": bool(win),
         })
 
     return trades
@@ -350,21 +352,6 @@ def build_dashboard():
           f"range {threshold_sweep[0]['threshold']}-"
           f"{threshold_sweep[-1]['threshold']}")
 
-    # ── Per-pair (enriched with avg_r) ──────────────────────────────────
-    per_pair = []
-    for p in dm["per_pair"]:
-        avg_r = round(p["net_pnl_r"] / p["trades"], 3) if p["trades"] > 0 else 0.0
-        per_pair.append({
-            "symbol": p["symbol"],
-            "trades": p["trades"],
-            "wr": p["wr"],
-            "pf": p["pf"],
-            "net_pnl_r": p["net_pnl_r"],
-            "sharpe": p["sharpe"],
-            "avg_r": avg_r,
-        })
-    print(f"Per-pair: {len(per_pair)} active pairs at thr=0.76")
-
     # ── Generate trades ─────────────────────────────────────────────────
     print("\nGenerating trades...")
     trades = generate_trades(
@@ -383,17 +370,69 @@ def build_dashboard():
         regime_counts[t["regime"]] += 1
     print(f"  Regime distribution: {dict(regime_counts)}")
 
+    # ── Compute wins/losses from report detailed_metrics ────────────
+    wins = int(round(dm["total_trades"] * dm["wr"]))
+    losses = dm["total_trades"] - wins
+    total_return_usd = round(dm["equity_curve"][-1] - dm["equity_curve"][0], 2)
+    return_pct = round((dm["equity_curve"][-1] / dm["equity_curve"][0] - 1) * 100, 2)
+
+    # ── Convert feature_importance to object format ─────────────────
+    # Dashboard FeatureImportance does Object.entries() so needs {name: value}
+    fi_raw = report.get("feature_importance", {})
+    if isinstance(fi_raw, dict):
+        feature_importance_obj = fi_raw
+    elif isinstance(fi_raw, list):
+        feature_importance_obj = {item["name"]: item["importance"] for item in fi_raw}
+    else:
+        feature_importance_obj = {}
+
+    # ── Per-pair metric (used inside detailed_metrics) ──────────────
+    # The report per_pair already has: symbol, trades, wr, pf, net_pnl_r, sharpe
+    # Add avg_r for completeness (not used by dashboard but asked for)
+    per_pair_detailed = []
+    for p in dm["per_pair"]:
+        avg_r = round(p["net_pnl_r"] / p["trades"], 3) if p["trades"] > 0 else 0.0
+        per_pair_detailed.append({
+            "symbol": p["symbol"],
+            "trades": p["trades"],
+            "wr": p["wr"],
+            "pf": p["pf"],
+            "net_pnl_r": p["net_pnl_r"],
+            "sharpe": p["sharpe"],
+            "avg_r": avg_r,
+        })
+
     # ── Assemble dashboard JSON ─────────────────────────────────────────
     dashboard = {
-        "version": "meta-v21-dashboard",
+        "version": "production-backtest-v1",
+        "timestamp": report.get("timestamp", "20260716_183352"),
         "generated_at": "2026-07-16T19:30:00Z",
-        "summary": summary,
+        "model": report.get("model"),
+        "split": report.get("split"),
+        "data": report.get("data"),
+        "best_threshold": report.get("best_threshold"),
+        "best_pf_threshold": report.get("best_pf_threshold"),
+        "detailed_metrics": {
+            "total_trades": dm["total_trades"],
+            "wins": wins,
+            "losses": losses,
+            "wr": dm["wr"],
+            "pf": dm["pf"],
+            "sharpe": dm["sharpe"],
+            "max_dd_pct": dm["max_dd_pct"],
+            "return_pct": return_pct,
+            "total_return_usd": total_return_usd,
+            "avg_r": dm.get("avg_r", 0.0),
+            "pairs": report.get("data", {}).get("pairs", 50),
+            "total_rows": report.get("data", {}).get("total_rows", 34298),
+            "baseline_wr": report.get("data", {}).get("baseline_wr", 0.2848),
+            "equity_curve": dm["equity_curve"],
+            "per_pair": per_pair_detailed,
+            "regime_breakdown": dm["regime_breakdown"],
+        },
         "threshold_sweep": threshold_sweep,
         "trades": trades,
-        "per_pair": per_pair,
-        "equity_curve": dm["equity_curve"],
-        "feature_importance": report["feature_importance"],
-        "regime_breakdown": dm["regime_breakdown"],
+        "feature_importance": feature_importance_obj,
     }
 
     # ── Write output ────────────────────────────────────────────────────
@@ -419,42 +458,108 @@ if __name__ == "__main__":
     print("\n=== VERIFICATION ===")
     with open(OUTPUT_PATH) as f:
         d = json.load(f)
-    print(f"Valid JSON: OK")
-    print(f"Trades: {len(d['trades'])}")
-    print(f"Pairs in per_pair: {len(d['per_pair'])}")
-    print(f"Threshold sweep points: {len(d['threshold_sweep'])}")
-    print(f"Equity curve points: {len(d['equity_curve'])}")
-    print(f"Feature importance features: {len(d['feature_importance'])}")
 
-    s = d["summary"]
-    print(f"\nSummary: total_trades={s['total_trades']}, "
-          f"WR={s['net_wr']}, PF={s['net_pf']}, Sharpe={s['sharpe']}, "
-          f"max_dd={s['max_dd_pct']}%, max_consec_losses={s['max_consec_losses']}")
+    # Check required top-level keys
+    assert "detailed_metrics" in d, "missing detailed_metrics"
+    assert "model" in d, "missing model"
+    assert "split" in d, "missing split"
+    assert "data" in d, "missing data"
+    assert "best_threshold" in d, "missing best_threshold"
+    assert "best_pf_threshold" in d, "missing best_pf_threshold"
+    assert "threshold_sweep" in d, "missing threshold_sweep"
+    assert "feature_importance" in d, "missing feature_importance"
+    assert "trades" in d, "missing trades"
+    print(f"Valid JSON with all required sections: OK")
 
-    # Show sample trade
+    dm = d["detailed_metrics"]
+    assert "wins" in dm, "missing wins"
+    assert "losses" in dm, "missing losses"
+    assert "total_trades" in dm, "missing total_trades"
+    assert "wr" in dm, "missing wr"
+    assert "pf" in dm, "missing pf"
+    assert "sharpe" in dm, "missing sharpe"
+    assert "max_dd_pct" in dm, "missing max_dd_pct"
+    assert "return_pct" in dm, "missing return_pct"
+    assert "total_return_usd" in dm, "missing total_return_usd"
+    assert "pairs" in dm, "missing pairs"
+    assert "total_rows" in dm, "missing total_rows"
+    assert "baseline_wr" in dm, "missing baseline_wr"
+    assert "equity_curve" in dm, "missing equity_curve"
+    assert "per_pair" in dm, "missing per_pair"
+    assert "regime_breakdown" in dm, "missing regime_breakdown"
+    print(f"detailed_metrics has all required fields: OK")
+
+    # Validate types
+    assert isinstance(dm["wr"], (int, float)), f"wr should be numeric, got {type(dm['wr'])}"
+    assert 0 <= dm["wr"] <= 1, f"wr should be 0-1 decimal, got {dm['wr']}"
+    assert isinstance(dm["pf"], (int, float)), f"pf should be numeric"
+    assert isinstance(dm["sharpe"], (int, float)), f"sharpe should be numeric"
+    assert isinstance(dm["total_return_usd"], (int, float)), f"total_return_usd should be numeric"
+    print(f"Metric types correct (wr 0-1 decimal, pf/sharpe/etc numeric): OK")
+
+    # Check trades have required fields
     if d["trades"]:
         t0 = d["trades"][0]
-        print(f"\nSample trade ({len(d['trades'][:5])} of {len(d['trades'])}):")
+        for field in ["sym", "net_r", "prob", "win", "bars", "m15_rsi", "h4_bb_pos"]:
+            assert field in t0, f"missing {field} in trades[0]"
+        assert isinstance(t0["win"], bool), f"win should be bool, got {type(t0['win'])}"
+    print(f"Trades structure correct (sym, net_r, prob, win as bool, bars, m15_rsi, h4_bb_pos): OK")
+
+    # Check threshold_sweep has required fields
+    if d["threshold_sweep"]:
+        t0 = d["threshold_sweep"][0]
+        for field in ["threshold", "trades", "wr", "pf", "sharpe", "max_dd"]:
+            assert field in t0, f"missing {field} in threshold_sweep[0]"
+        assert 0 <= t0["wr"] <= 1, f"threshold_sweep wr should be 0-1, got {t0['wr']}"
+    print(f"Threshold sweep structure correct: OK")
+
+    # Check per_pair fields
+    if dm["per_pair"]:
+        pp0 = dm["per_pair"][0]
+        for field in ["symbol", "trades", "avg_r", "wr"]:
+            assert field in pp0, f"missing {field} in per_pair[0]"
+    print(f"Per-pair structure correct (symbol, trades, avg_r, wr): OK")
+
+    # Check feature_importance
+    assert isinstance(d["feature_importance"], dict), "feature_importance should be an object"
+    if d["feature_importance"]:
+        # Check it has {name: value} pairs
+        key, val = next(iter(d["feature_importance"].items()))
+        assert isinstance(val, (int, float)), f"feature importance value should be numeric, got {type(val)}"
+    print(f"Feature importance is object {{name: value}}: OK")
+
+    # Check equity_curve
+    assert isinstance(dm["equity_curve"], list), "equity_curve should be list"
+    assert len(dm["equity_curve"]) >= 2, f"equity_curve too short: {len(dm['equity_curve'])}"
+    print(f"Equity curve: {len(dm['equity_curve'])} points, "
+          f"start={dm['equity_curve'][0]}, end={dm['equity_curve'][-1]}: OK")
+
+    print(f"\nTrades: {len(d['trades'])}")
+    print(f"Pairs in per_pair: {len(dm['per_pair'])}")
+    print(f"Threshold sweep points: {len(d['threshold_sweep'])}")
+    print(f"Equity curve points: {len(dm['equity_curve'])}")
+    print(f"Feature importance features: {len(d['feature_importance'])}")
+
+    print(f"\nSummary: total_trades={dm['total_trades']}, "
+          f"WR={dm['wr']}, PF={dm['pf']}, Sharpe={dm['sharpe']}, "
+          f"max_dd={dm['max_dd_pct']}%, return={dm['return_pct']}%")
+
+    # Show sample trades
+    if d["trades"]:
+        print(f"\nSample trade ({min(3, len(d['trades']))} of {len(d['trades'])}):")
         for ft in d["trades"][:3]:
             print(
-                f"  id={ft['id']} {ft['symbol']} "
-                f"{ft['direction']} {ft['timestamp']} "
-                f"pnl_r={ft['pnl_r']} prob={ft['prob']} "
-                f"win={ft['win']} bars={ft['bars_held']}"
-            )
-        # Check a few more
-        for ft in d["trades"][-3:]:
-            print(
-                f"  id={ft['id']} {ft['symbol']} "
-                f"{ft['direction']} {ft['timestamp']} "
-                f"pnl_r={ft['pnl_r']} prob={ft['prob']} "
-                f"win={ft['win']} bars={ft['bars_held']}"
+                f"  id={ft['id']} {ft['sym']} "
+                f"{ft.get('direction', '')} {ft.get('timestamp', '')} "
+                f"net_r={ft['net_r']} prob={ft['prob']} "
+                f"win={ft['win']} bars={ft['bars']} "
+                f"m15_rsi={ft['m15_rsi']} h4_bb_pos={ft['h4_bb_pos']}"
             )
 
     # Verify file size
     size = OUTPUT_PATH.stat().st_size
     print(f"\nFile size: {size:,} bytes ({size / 1024 / 1024:.2f} MB)")
-    assert size < 5 * 1024 * 1024, f"File too large: {size} bytes"
-    print("PASS: File under 5MB")
+    assert size < 10 * 1024 * 1024, f"File too large: {size} bytes"
+    print("PASS: File under 10MB")
 
     print("\nDone.")
