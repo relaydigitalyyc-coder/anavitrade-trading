@@ -13,6 +13,7 @@ await assert.rejects(
       },
     },
     account,
+    signatureChainId: 1666,
     typedData: {
       domain: {
         name: "AsterSignTransaction",

@@ -18,6 +18,7 @@
     "db:migrate": "wrangler d1 migrations apply anavitrade-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply anavitrade-db --remote",
     "aster:smoke-contract": "tsx scripts/aster-contract-smoke.ts",
+    "aster:smoke-browser": "tsx scripts/aster-onboarding-browser.ts",
     "aster:live-proof": "tsx scripts/aster-live-proof.ts"
   },
   "dependencies": {

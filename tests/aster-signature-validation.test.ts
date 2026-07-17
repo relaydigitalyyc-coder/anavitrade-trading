@@ -15,6 +15,7 @@ await assert.rejects(
   signAsterRegistrationTypedData({
     provider,
     account,
+    signatureChainId: 1666,
     typedData: {
       domain: {
         name: "NotAster",

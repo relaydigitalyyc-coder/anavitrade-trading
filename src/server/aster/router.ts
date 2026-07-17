@@ -11,6 +11,9 @@ import {
   syncAsterFuturesBalance,
 } from "./store";
 
+const activationModeSchema = z.literal("approveAgentWithBuilder");
+const activationEndpointSchema = z.literal("/fapi/v3/approveAgent");
+
 const registrationParamsSchema = z.object({
   agentName: z.string().min(1).max(64),
   agentAddress: z.string().min(10).max(100),
@@ -122,6 +125,9 @@ export const asterRouter = router({
 
   completeRegistration: protectedProcedure
     .input(z.object({
+      activationMode: activationModeSchema,
+      endpoint: activationEndpointSchema,
+      signatureChainId: z.number().int().positive(),
       params: registrationParamsSchema,
       signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
     }))

@@ -78,6 +78,20 @@ async function assertApproveAgentAcceptsEmptySuccessBody() {
   assert.deepEqual(result, {});
 }
 
+async function assertApproveAgentUsesPreparedSignatureChainId() {
+  configure({ ASTER_CODE_SIGNING_CHAIN_ID: "1666" });
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return okResponse({ code: 200, msg: "success" });
+  };
+
+  await new AsterApiClient().approveAgent(approvalParams, "0xapprovalsignature", 714);
+
+  const params = new URL(calls[0].url).searchParams;
+  assert.equal(params.get("signatureChainId"), "714");
+}
+
 async function assertCompatApprovalParams() {
   configure({
     ASTER_ENVIRONMENT: "testnet",
@@ -98,13 +112,24 @@ async function assertCompatApprovalParams() {
 }
 
 async function assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain() {
-  let rpcCall: { method: string; params?: unknown[] } | null = null;
+  const rpcCalls: Array<{ method: string; params?: unknown[] }> = [];
+  const forbiddenMethods = new Set([
+    "eth_chainId",
+    "wallet_switchEthereumChain",
+    "wallet_addEthereumChain",
+    "personal_sign",
+    "eth_signTypedData",
+    "eth_signTypedData_v3",
+  ]);
   const provider = {
     async request(args: { method: string; params?: unknown[] }) {
-      rpcCall = args;
+      rpcCalls.push(args);
+      if (forbiddenMethods.has(args.method)) throw new Error("Forbidden wallet method: " + args.method);
+      assert.equal(args.method, "eth_signTypedData_v4");
       return "0xabcdef";
     },
   };
+  const walletChainId = "0x1";
 
   const typedData = {
     domain: {
@@ -116,26 +141,51 @@ async function assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain()
     types: {
       ApproveAgent: [
         { name: "AgentName", type: "string" },
+        { name: "AgentAddress", type: "string" },
+        { name: "IpWhitelist", type: "string" },
+        { name: "Expired", type: "uint256" },
+        { name: "CanSpotTrade", type: "bool" },
+        { name: "CanPerpTrade", type: "bool" },
         { name: "CanWithdraw", type: "bool" },
+        { name: "Builder", type: "string" },
+        { name: "MaxFeeRate", type: "string" },
+        { name: "BuilderName", type: "string" },
+        { name: "User", type: "string" },
+        { name: "Nonce", type: "uint256" },
       ],
     },
     primaryType: "ApproveAgent",
     message: {
       AgentName: "Anavitrade",
+      AgentAddress: "0x1111111111111111111111111111111111111111",
+      IpWhitelist: "",
+      Expired: 1790000000000,
+      CanSpotTrade: false,
+      CanPerpTrade: true,
       CanWithdraw: false,
+      Builder: "0x2222222222222222222222222222222222222222",
+      MaxFeeRate: "0.00001",
+      BuilderName: "Anavitrade",
+      User: "0x3333333333333333333333333333333333333333",
+      Nonce: 1790000000000000,
     },
   };
 
   const signature = await signAsterRegistrationTypedData({
     provider,
     account: "0x3333333333333333333333333333333333333333",
+    signatureChainId: 1666,
     typedData,
   });
 
   assert.equal(signature, "0xabcdef");
-  assert.equal(rpcCall?.method, "eth_signTypedData_v4");
-  assert.deepEqual(rpcCall?.params?.slice(0, 1), ["0x3333333333333333333333333333333333333333"]);
-  const payload = JSON.parse(rpcCall?.params?.[1] as string);
+  assert.equal(walletChainId, "0x1");
+  assert.equal(rpcCalls.length, 1);
+  assert.equal(rpcCalls[0].method, "eth_signTypedData_v4");
+  assert.deepEqual(rpcCalls[0].params?.slice(0, 1), ["0x3333333333333333333333333333333333333333"]);
+  assert.equal(typeof rpcCalls[0].params?.[1], "string");
+  const payload = JSON.parse(rpcCalls[0].params?.[1] as string);
+  assert.deepEqual(payload, typedData);
   assert.equal(payload.domain.chainId, 1666);
   assert.equal(payload.primaryType, "ApproveAgent");
 }
@@ -335,6 +385,7 @@ async function assertBalanceAndStrategyContracts() {
 
 await assertApproveAgentContract();
 await assertApproveAgentAcceptsEmptySuccessBody();
+await assertApproveAgentUsesPreparedSignatureChainId();
 await assertCompatApprovalParams();
 await assertBrowserAsterRegistrationSigningBypassesCurrentWalletChain();
 await assertOrderContract();

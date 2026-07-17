@@ -10,6 +10,7 @@ import type {
   AsterAgentPermissions,
   AsterAgentRegistrationChallenge,
   AsterAgentRegistrationParams,
+  AsterManagementTypedData,
   AsterAgentStatusView,
   AsterRemoteAgent,
   AsterRemoteBuilder,
@@ -21,6 +22,17 @@ const DEFAULT_PERMISSIONS: AsterAgentPermissions = {
   withdraw: false,
 };
 
+const ASTER_AGENT_ACTIVATION_MODE = "approveAgentWithBuilder" as const;
+const ASTER_APPROVE_AGENT_ENDPOINT = "/fapi/v3/approveAgent" as const;
+
+type StoredRegistrationChallenge = {
+  activationMode: typeof ASTER_AGENT_ACTIVATION_MODE;
+  endpoint: typeof ASTER_APPROVE_AGENT_ENDPOINT;
+  signatureChainId: number;
+  params: AsterAgentRegistrationParams;
+  typedData: AsterManagementTypedData;
+};
+
 function normalizeAddress(address: string) {
   return address.trim().toLowerCase();
 }
@@ -28,10 +40,35 @@ function normalizeAddress(address: string) {
 function parsePermissions(raw: string | null): AsterAgentPermissions {
   if (!raw) return DEFAULT_PERMISSIONS;
   try {
-    return { ...DEFAULT_PERMISSIONS, ...(JSON.parse(raw) as Partial<AsterAgentPermissions>) };
+    const parsed = JSON.parse(raw) as Partial<AsterAgentPermissions>;
+    return {
+      ...DEFAULT_PERMISSIONS,
+      perp: parsed.perp ?? DEFAULT_PERMISSIONS.perp,
+      spot: parsed.spot ?? DEFAULT_PERMISSIONS.spot,
+      withdraw: parsed.withdraw ?? DEFAULT_PERMISSIONS.withdraw,
+      maxFeeRate: parsed.maxFeeRate,
+      expiresAt: parsed.expiresAt,
+      ipWhitelist: parsed.ipWhitelist,
+    };
   } catch {
     return DEFAULT_PERMISSIONS;
   }
+}
+
+function parsePermissionsEnvelope(raw: string | null): Record<string, unknown> {
+  if (!raw) return { ...DEFAULT_PERMISSIONS };
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : { ...DEFAULT_PERMISSIONS };
+  } catch {
+    return { ...DEFAULT_PERMISSIONS };
+  }
+}
+
+function getStoredRegistrationChallenge(raw: string | null): StoredRegistrationChallenge | null {
+  const challenge = parsePermissionsEnvelope(raw).registrationChallenge;
+  if (!challenge || typeof challenge !== "object") return null;
+  return challenge as StoredRegistrationChallenge;
 }
 
 function toEpochMs(value: Date | number | null | undefined): number | null {
@@ -57,7 +94,7 @@ function managementFieldType(value: unknown): "string" | "bool" | "uint256" {
   return "string";
 }
 
-function registrationChallenge(account: typeof asterAgentAccounts.$inferSelect): AsterAgentRegistrationChallenge {
+async function registrationChallenge(account: typeof asterAgentAccounts.$inferSelect): Promise<AsterAgentRegistrationChallenge> {
   const permissions = parsePermissions(account.permissionsJson);
   const config = getAsterConfig();
   const feeCap = account.maxFeeRate ?? account.feeRate ?? config.defaultFeeRate;
@@ -81,7 +118,10 @@ function registrationChallenge(account: typeof asterAgentAccounts.$inferSelect):
     Object.entries(params).map(([key, value]) => [capitalizeKey(key), value]),
   ) as Record<string, string | boolean | number>;
 
-  return {
+  const challenge: AsterAgentRegistrationChallenge = {
+    activationMode: ASTER_AGENT_ACTIVATION_MODE,
+    endpoint: ASTER_APPROVE_AGENT_ENDPOINT,
+    signatureChainId: config.codeSigningChainId,
     params,
     typedData: {
       domain: {
@@ -100,6 +140,16 @@ function registrationChallenge(account: typeof asterAgentAccounts.$inferSelect):
       message,
     },
   };
+
+  const envelope = parsePermissionsEnvelope(account.permissionsJson);
+  await getDb().update(asterAgentAccounts)
+    .set({
+      permissionsJson: JSON.stringify({ ...envelope, registrationChallenge: challenge }),
+      updatedAt: Date.now(),
+    } as any)
+    .where(eq(asterAgentAccounts.id, account.id));
+
+  return challenge;
 }
 
 function statusView(account: typeof asterAgentAccounts.$inferSelect): AsterAgentStatusView {
@@ -118,9 +168,41 @@ function statusView(account: typeof asterAgentAccounts.$inferSelect): AsterAgent
   };
 }
 
-function decimalValue(value: string | number | null | undefined): number {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+function decimalValue(value: string | number | null | undefined): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => JSON.stringify(key) + ":" + stableJson(entry))
+      .join(",") + "}";
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+function assertEqualRegistrationValue(actual: unknown, expected: unknown, errorCode: string): void {
+  if (stableJson(actual) !== stableJson(expected)) throw new Error(errorCode);
+}
+
+function assertRegistrationChallengeMatches(input: {
+  account: typeof asterAgentAccounts.$inferSelect;
+  activationMode: typeof ASTER_AGENT_ACTIVATION_MODE;
+  endpoint: typeof ASTER_APPROVE_AGENT_ENDPOINT;
+  signatureChainId: number;
+  params: AsterAgentRegistrationParams;
+}): void {
+  const stored = getStoredRegistrationChallenge(input.account.permissionsJson);
+  if (!stored) throw new Error("ASTER_REGISTRATION_CHALLENGE_MISSING");
+  assertEqualRegistrationValue(input.activationMode, stored.activationMode, "ASTER_REGISTRATION_MODE_MISMATCH");
+  assertEqualRegistrationValue(input.endpoint, stored.endpoint, "ASTER_REGISTRATION_ENDPOINT_MISMATCH");
+  assertEqualRegistrationValue(input.signatureChainId, stored.signatureChainId, "ASTER_REGISTRATION_SIGNATURE_CHAIN_MISMATCH");
+  assertEqualRegistrationValue(input.params, stored.params, "ASTER_REGISTRATION_PARAMS_MISMATCH");
+  assertEqualRegistrationValue(stored.typedData.domain.chainId, input.signatureChainId, "ASTER_REGISTRATION_DOMAIN_CHAIN_MISMATCH");
+  assertEqualRegistrationValue(stored.typedData.primaryType, "ApproveAgent", "ASTER_REGISTRATION_TYPED_DATA_MISMATCH");
 }
 
 function remoteAgentMatches(account: typeof asterAgentAccounts.$inferSelect, remote: AsterRemoteAgent): boolean {
@@ -135,8 +217,13 @@ function remoteBuilderMatches(
   requestedMaxFeeRate: string,
   remote: AsterRemoteBuilder,
 ): boolean {
-  return normalizeAddress(remote.builderAddress ?? "") === normalizeAddress(account.builderAddress)
-    && decimalValue(remote.maxFeeRate) >= decimalValue(requestedMaxFeeRate);
+  const approvedFeeRate = decimalValue(remote.maxFeeRate);
+  const requestedFeeRate = decimalValue(requestedMaxFeeRate);
+  if (approvedFeeRate == null || requestedFeeRate == null) return false;
+  const remoteUserMatches = !remote.userAddress || normalizeAddress(remote.userAddress) === normalizeAddress(account.asterAccountAddress);
+  return remoteUserMatches
+    && normalizeAddress(remote.builderAddress ?? "") === normalizeAddress(account.builderAddress)
+    && approvedFeeRate >= requestedFeeRate;
 }
 
 async function validateAsterReadback(
@@ -262,6 +349,9 @@ export async function prepareAsterRegistration(input: {
 
 export async function completeAsterRegistration(input: {
   userId: number;
+  activationMode: typeof ASTER_AGENT_ACTIVATION_MODE;
+  endpoint: typeof ASTER_APPROVE_AGENT_ENDPOINT;
+  signatureChainId: number;
   params: AsterAgentRegistrationParams;
   signature: string;
 }) {
@@ -284,9 +374,16 @@ export async function completeAsterRegistration(input: {
   if (normalizeAddress(input.params.builder) !== normalizeAddress(account.builderAddress)) {
     throw new Error("ASTER_REGISTRATION_BUILDER_MISMATCH");
   }
+  assertRegistrationChallengeMatches({
+    account,
+    activationMode: input.activationMode,
+    endpoint: input.endpoint,
+    signatureChainId: input.signatureChainId,
+    params: input.params,
+  });
 
   const client = new AsterApiClient();
-  await client.approveAgent(input.params, input.signature);
+  await client.approveAgent(input.params, input.signature, input.signatureChainId);
   await validateAsterReadback(account, input.params.maxFeeRate, client);
   await recordAsterApprovals({
     userId: input.userId,
