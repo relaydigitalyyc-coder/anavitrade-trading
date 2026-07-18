@@ -1,5 +1,22 @@
 # Progress Log
 
+## Session: 2026-07-18 (Thread Consolidation → Completion PRD)
+
+### Done This Session
+- [x] Picked up all open threads: honest-ML-gate PRD (draft), production-safety operator gates,
+      Aster new-user onboarding proof, signal-pipeline starvation, uncommitted working tree
+- [x] Verified auth dev-registration tests pass (2/2, tests/auth-development-registration.test.ts)
+- [x] Verified locked-backtest tooling exists but has never produced a report
+- [x] Read meta-v24/v25 training_results.json — AUC 0.52-0.53, numbers not citable (leaky threshold)
+- [x] Wrote docs/prd/2026-07-18-completion.md — consolidates 4 PRDs + working tree into
+      5 threads (A hygiene, B locked gate, C operator gates, D Aster E2E, E signal pipeline)
+      with ordering, dependencies, and permanent release gates
+
+### Next
+1. Thread A: land 3 separate commits (auth dev-registration, train.py --input, honest experiment artifacts)
+2. Thread B: run scripts/ml/locked-walkforward-backtest.py on 120-day/49-pair corpus
+3. Threads C/D/E in parallel per PRD ordering
+
 ## Session: 2026-07-16 (Session Unification & Pipeline Priming)
 
 ### Context Recovered
