@@ -1079,12 +1079,16 @@ export type {
   GateDecision,
   GateResult,
   GateDirection,
+  EntryMode,
 } from "./dispatch-gate";
 export {
   evaluateDispatchGate,
   GATE_CONFIG,
   ML_THRESHOLD,
+  ML_CONFIRM_THRESHOLD,
+  CONFIRM_PULLBACK_FRACTION,
   computeAtrPct,
   computeRsi14,
+  computeConfirmationPrice,
   isBullRegime,
 } from "./dispatch-gate";

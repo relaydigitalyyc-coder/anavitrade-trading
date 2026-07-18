@@ -11,7 +11,7 @@ import { getKlines } from "../analysis/kline-repository";
 import { runInference, type Candle } from "../ml/inference-router";
 import {
   evaluateDispatchGate, GATE_CONFIG, ML_THRESHOLD,
-  computeAtrPct, computeRsi14, isBullRegime,
+  computeAtrPct, computeRsi14, isBullRegime, computeConfirmationPrice,
   type GateDecision, type GateDirection,
 } from "../signals/unified-engine";
 import { assertAutomatedExecutionSupported } from "../cex/registry";
@@ -173,6 +173,32 @@ function protectiveOrderReason(intent: TradeIntentInput, referencePrice: number)
     return "aster_invalid_sell_protective_range";
   }
   return null;
+}
+
+/**
+ * When the gate's entryMode is "limit_confirm" (real edge, marginal score),
+ * override the dispatched order to a LIMIT pulled back toward the stop
+ * instead of chasing at market — see computeConfirmationPrice. Falls back to
+ * the original market intent (with a warning) if entry/stop prices are
+ * missing or malformed, rather than guessing.
+ */
+export function applyEntryMode(
+  intent: TradeIntentInput,
+  entryMode: "market" | "limit_confirm",
+  intentId: number,
+): TradeIntentInput {
+  if (entryMode !== "limit_confirm") return intent;
+
+  const entry = parseFloat(intent.limitPrice ?? "");
+  const stopLoss = parseFloat(intent.stopLossPrice ?? "");
+  if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(stopLoss) || stopLoss <= 0) {
+    console.warn(`[dispatch-gate] intent ${intentId} entryMode=limit_confirm but missing/invalid entry or stop price — dispatching at market instead`);
+    return intent;
+  }
+
+  const direction: GateDirection = intent.side === "SELL" ? "short" : "long";
+  const confirmPrice = computeConfirmationPrice(entry, stopLoss, direction);
+  return { ...intent, orderType: "LIMIT", limitPrice: String(confirmPrice) };
 }
 
 async function loadIntent(intentId: number): Promise<TradeIntentInput | null> {
@@ -734,6 +760,7 @@ export async function createExecutionJobsForIntent(intentId: number) {
   }
 
   const sizeFactor = gate.decision.sizeFactor;
+  const dispatchIntent = applyEntryMode(intent, gate.decision.entryMode, intentId);
   const connections = await db.select().from(cexConnections)
     .where(eq(cexConnections.status, "active"));
 
@@ -756,13 +783,13 @@ export async function createExecutionJobsForIntent(intentId: number) {
   const [cexResults, asterResults] = await Promise.all([
     Promise.allSettled(
       readyConnections.map(async (conn) => {
-        const r = await fanOutCex(intent, intentId, [conn], preloaded, sizeFactor);
+        const r = await fanOutCex(dispatchIntent, intentId, [conn], preloaded, sizeFactor);
         return r[0] ?? { userId: conn.userId, exchange: conn.exchange, status: "error" as const };
       }),
     ),
     (async () => {
       try {
-        return await fanOutAster(intent, intentId, sizeFactor);
+        return await fanOutAster(dispatchIntent, intentId, sizeFactor);
       } catch (e: any) {
         return [{ userId: 0, provider: "aster" as const, status: "error" as const, reason: e?.message }];
       }

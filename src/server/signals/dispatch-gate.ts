@@ -50,6 +50,14 @@ export const GATE_CONFIG = {
  */
 export const ML_THRESHOLD: number = modelCard.threshold;
 
+/**
+ * Above this, a signal is high-conviction enough to enter immediately at
+ * market (unchanged legacy behavior). Between ML_THRESHOLD and this value,
+ * the signal is real but marginal — see "entry confirmation band" below.
+ * Starting value, not backtest-derived; tune once live data accumulates.
+ */
+export const ML_CONFIRM_THRESHOLD: number = ML_THRESHOLD + 0.05;
+
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
 export type GateDirection = "long" | "short";
@@ -60,12 +68,21 @@ export type GateDirection = "long" | "short";
  */
 export type GateResult =
   | "passed"
+  | "passed_confirm"
   | "universe"
   | "tier_b_paper"
   | "tier_c_reject"
   | "rsi_extension"
   | "ml"
   | "ml_unreachable";
+
+/**
+ * "market": dispatch immediately at market (high-conviction, mlScore >= ML_CONFIRM_THRESHOLD).
+ * "limit_confirm": real edge but marginal score — dispatch as a LIMIT order pulled back
+ * toward the stop instead of chasing at market, so price action itself provides
+ * confirmation before the order can fill.
+ */
+export type EntryMode = "market" | "limit_confirm";
 
 export interface GateInput {
   symbol: string;
@@ -82,6 +99,8 @@ export interface GateInput {
   mlScore: number | null;
   /** Decision threshold (defaults to the model card value). */
   mlThreshold?: number;
+  /** Confirmation-band threshold (defaults to ML_CONFIRM_THRESHOLD). */
+  mlConfirmThreshold?: number;
   /** True when the inference call itself failed / was unreachable (R1.3). */
   mlUnreachable: boolean;
   /**
@@ -102,6 +121,8 @@ export interface GateDecision {
   reason: string;
   /** Position-size multiplier from the regime gate (1.0 or 0.5). */
   sizeFactor: number;
+  /** How the entry should be triggered — see EntryMode. "market" on any non-approved path. */
+  entryMode: EntryMode;
 }
 
 /* ─── Pure gate evaluation (ordered) ─────────────────────────────────────── */
@@ -124,6 +145,7 @@ export function evaluateDispatchGate(
     gateResult,
     reason,
     sizeFactor: 0,
+    entryMode: "market",
   });
 
   /* ── 1. Universe gate ───────────────────────────────────────────────── */
@@ -155,6 +177,7 @@ export function evaluateDispatchGate(
       gateResult: "tier_b_paper",
       reason: `tier_b_score:${input.tierScore}`,
       sizeFactor: 0,
+      entryMode: "market",
     };
   }
 
@@ -183,14 +206,50 @@ export function evaluateDispatchGate(
     );
   }
 
+  /* ── Entry confirmation band (graduated conviction, mirrors Pine v7) ──── */
+  // A score just above the reject threshold is real edge but not strong
+  // enough to chase at market: dispatch as a LIMIT order pulled back toward
+  // the stop instead (see dispatch.ts), so price action confirms before fill.
+  const confirmThreshold = input.mlConfirmThreshold ?? ML_CONFIRM_THRESHOLD;
+  const entryMode: EntryMode = input.mlScore >= confirmThreshold ? "market" : "limit_confirm";
+  const gateResult: GateResult = entryMode === "market" ? "passed" : "passed_confirm";
+
   /* ── Passed all pre-risk gates ──────────────────────────────────────── */
   return {
     approved: true,
     paperOnly: false,
-    gateResult: "passed",
-    reason: `passed:score=${input.mlScore.toFixed(4)};size=${sizeFactor}`,
+    gateResult,
+    reason: `${gateResult}:score=${input.mlScore.toFixed(4)};size=${sizeFactor};entry=${entryMode}`,
     sizeFactor,
+    entryMode,
   };
+}
+
+/**
+ * How far to pull the entry back toward the stop-loss for a "limit_confirm"
+ * entry (0 = original entry, 1 = the stop itself). Starting value, not
+ * backtest-derived; tune once live confirmation-band fills accumulate.
+ */
+export const CONFIRM_PULLBACK_FRACTION = 0.3;
+
+/**
+ * Confirmation-band entry price for a marginal-conviction ("limit_confirm")
+ * signal: pulls the entry back partway toward the stop-loss so the order
+ * only fills if price actually retraces toward invalidation, instead of
+ * chasing an extended move on a score that barely cleared ML_THRESHOLD.
+ * Result always lies strictly between `stopLoss` and `entry` for
+ * `0 < pullbackFraction < 1`.
+ */
+export function computeConfirmationPrice(
+  entry: number,
+  stopLoss: number,
+  direction: GateDirection,
+  pullbackFraction: number = CONFIRM_PULLBACK_FRACTION,
+): number {
+  const frac = Math.min(1, Math.max(0, pullbackFraction));
+  return direction === "long"
+    ? entry - (entry - stopLoss) * frac
+    : entry + (stopLoss - entry) * frac;
 }
 
 /* ─── Pure indicator helpers (for the wiring layer to feed the gate) ─────── */

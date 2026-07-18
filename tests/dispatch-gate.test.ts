@@ -13,8 +13,10 @@ import {
   evaluateDispatchGate,
   GATE_CONFIG,
   ML_THRESHOLD,
+  ML_CONFIRM_THRESHOLD,
   computeAtrPct,
   computeRsi14,
+  computeConfirmationPrice,
   isBullRegime,
   type GateInput,
 } from "../src/server/signals/dispatch-gate.ts";
@@ -57,6 +59,7 @@ test("passes when all gates clear (live, full size)", () => {
   assert.equal(d.paperOnly, false);
   assert.equal(d.gateResult, "passed");
   assert.equal(d.sizeFactor, 1);
+  assert.equal(d.entryMode, "market");
 });
 
 /* ── 1. Universe gate ── */
@@ -173,11 +176,52 @@ test("ml_unreachable when score is null", () => {
 test("rejects when score below threshold", () => {
   const d = evaluateDispatchGate(base({ mlScore: ML_THRESHOLD - 0.001 }));
   assert.equal(d.gateResult, "ml");
+  assert.equal(d.approved, false);
 });
 
-test("passes when score exactly at threshold", () => {
+/* ── Entry confirmation band (graduated conviction, ML → rules entry timing) ── */
+test("score exactly at threshold is real edge but marginal -> limit_confirm, not market", () => {
   const d = evaluateDispatchGate(base({ mlScore: ML_THRESHOLD }));
+  assert.equal(d.approved, true);
+  assert.equal(d.gateResult, "passed_confirm");
+  assert.equal(d.entryMode, "limit_confirm");
+});
+
+test("score just under the confirm threshold stays in the confirmation band", () => {
+  const d = evaluateDispatchGate(base({ mlScore: ML_CONFIRM_THRESHOLD - 0.001 }));
+  assert.equal(d.approved, true);
+  assert.equal(d.gateResult, "passed_confirm");
+  assert.equal(d.entryMode, "limit_confirm");
+});
+
+test("score at/above the confirm threshold dispatches at market (legacy behavior)", () => {
+  const atThreshold = evaluateDispatchGate(base({ mlScore: ML_CONFIRM_THRESHOLD }));
+  assert.equal(atThreshold.gateResult, "passed");
+  assert.equal(atThreshold.entryMode, "market");
+
+  const above = evaluateDispatchGate(base({ mlScore: 0.9 }));
+  assert.equal(above.gateResult, "passed");
+  assert.equal(above.entryMode, "market");
+});
+
+test("a custom mlConfirmThreshold overrides the default", () => {
+  const d = evaluateDispatchGate(base({ mlScore: ML_THRESHOLD + 0.02, mlConfirmThreshold: ML_THRESHOLD + 0.01 }));
   assert.equal(d.gateResult, "passed");
+  assert.equal(d.entryMode, "market");
+});
+
+test("computeConfirmationPrice: long entry pulls back toward the stop (strictly between)", () => {
+  const price = computeConfirmationPrice(100, 90, "long");
+  assert.ok(price > 90 && price < 100, `expected 90 < ${price} < 100`);
+  assert.equal(computeConfirmationPrice(100, 90, "long", 0), 100);
+  assert.equal(computeConfirmationPrice(100, 90, "long", 1), 90);
+});
+
+test("computeConfirmationPrice: short entry pulls back toward the stop (strictly between)", () => {
+  const price = computeConfirmationPrice(100, 110, "short");
+  assert.ok(price > 100 && price < 110, `expected 100 < ${price} < 110`);
+  assert.equal(computeConfirmationPrice(100, 110, "short", 0), 100);
+  assert.equal(computeConfirmationPrice(100, 110, "short", 1), 110);
 });
 
 /* ── Indicator helpers ── */
