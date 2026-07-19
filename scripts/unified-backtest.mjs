@@ -403,10 +403,63 @@ function simulate(trades, acceptFn, label) {
  * WALK-FORWARD
  * ════════════════════════════════════════════════════════════════════════ */
 
+// Deterministic PRNG (mulberry32). Fixed seed => reproducible split, not cherry-picked.
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Fisher-Yates on a COPY (never mutates the caller's array, e.g. ALL).
+function seededShuffle(arr, rand) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+const WF_SEED = 1337; // fixed once; do not re-tune to change results
+const WF_TRAIN_FRACTION = 0.6;
+const WF_SCORE_BUCKETS = 5;
+
 function walkForward(trades, acceptFn, label) {
-  const split = Math.floor(trades.length * 0.6);
-  const train = trades.slice(0, split);
-  const val = trades.slice(split);
+  // METHODOLOGY NOTE (2026-07-19): backtest-prioritized.json has NO timestamp
+  // field, and the array is sorted by descending Coinlegs score ("prioritized").
+  // The old positional 60/40 slice was therefore NOT chronological — it
+  // quarantined virtually all high-score trades into the first partition, so any
+  // score/tier-selective acceptFn (ICR, RR Conservative, RR Optimal, Consensus)
+  // got val=0 trades and a FAIL that was an artifact of the file's sort order,
+  // not evidence of fragility.
+  //
+  // Until the corpus carries real timestamps, a true walk-forward is impossible.
+  // The honest substitute is a reproducible randomized split, STRATIFIED by
+  // score quintile: sort by score, cut into 5 equal buckets, shuffle each bucket
+  // with a fixed-seed PRNG, and take 60/40 within every bucket. Stratification
+  // (vs a plain shuffle) guarantees both partitions see the same score
+  // distribution, so the only thing tested is trade-level variance — one
+  // unlucky shuffle can't skew score mass into a partition. The 60/40 ratio and
+  // the pass/robust thresholds are unchanged from the original.
+  //
+  // CAVEAT: without timestamps this measures split stability of the edge, NOT
+  // temporal out-of-sample generalization. Do not read "PASS" here as
+  // walk-forward evidence in the chronological sense.
+  const rand = mulberry32(WF_SEED);
+  const byScore = [...trades].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const bucketSize = Math.ceil(byScore.length / WF_SCORE_BUCKETS);
+  const train = [];
+  const val = [];
+  for (let b = 0; b < WF_SCORE_BUCKETS; b++) {
+    const bucket = seededShuffle(byScore.slice(b * bucketSize, (b + 1) * bucketSize), rand);
+    const cut = Math.floor(bucket.length * WF_TRAIN_FRACTION);
+    train.push(...bucket.slice(0, cut));
+    val.push(...bucket.slice(cut));
+  }
   const trainR = simulate(train, acceptFn, `${label} [train]`);
   const valR = simulate(val, acceptFn, `${label} [val]`);
   const trainOk = trainR.trades > 10 && parseFloat(trainR.sharpe) > 0.3;
@@ -502,7 +555,7 @@ console.log(`BEST WINRATE: ${bestWR.label} (${bestWR.wr}%)`);
 
 // ── Walk-forward ──
 console.log(`\n${"=".repeat(110)}`);
-console.log("WALK-FORWARD VALIDATION (chronological 60/40)");
+console.log(`WALK-FORWARD VALIDATION (score-stratified random 60/40, seed ${WF_SEED} — corpus has no timestamps; NOT chronological)`);
 console.log("─".repeat(110));
 const strategies = [
   { name: "ICR Strategy", fn: (t) => ({ accepted: icrScore(t).accepted }) },
