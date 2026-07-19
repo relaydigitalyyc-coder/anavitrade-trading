@@ -161,6 +161,17 @@ For any new backtest campaign:
 3. Save key findings to `findings.md`
 4. Append results to `docs/analysis/EMPIRICAL_FINDINGS.md`
 
+### Multi-Session Coordination
+
+This repo is regularly worked by more than one Claude/deepseek CLI session at once.
+Read `docs/ops/multi-session-coordination.md` before editing `progress.md`,
+`findings.md`, or `task_plan.md` — those are shared scratch files, and a naive
+read-modify-write has already caused a real data-loss incident (recovered, see
+`ca56319`). Register at `.claude/sessions/<your-plan-slug>.json`, log to
+`progress/<slug>.md` (never edit `progress.md` directly — it's generated via
+`scripts/merge-session-logs.sh`), and use the `.claude/locks/` convention for any
+genuinely singular shared file you need to edit.
+
 ## Guardrails
 
 - Keep this project standalone.
