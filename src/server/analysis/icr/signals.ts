@@ -167,6 +167,64 @@ export function buildIcrSignal(
     if (direction === "short" && candle.rsi14 <= entryRsiMin) return null;
   }
 
+  /* ── 1c. WaveTrend extreme entry filter (opt-in) ────────────────────────
+   * When enabled, require that WT1 was at or beyond the oversold/overbought
+   * extreme (±60, standard Market Cipher B threshold) within the last 5
+   * candles before i and has since turned in the trade direction.  This
+   * mirrors the RSI filter's pattern: don't chase — only enter after an
+   * extreme has been reached and is now reversing. */
+  if (cfg.enableWaveTrendExtremeFilter) {
+    const lookback = 5;
+    let foundExtreme = false;
+    let turnOk = false;
+    for (let k = 1; k <= lookback; k++) {
+      const idx = i - k;
+      if (idx < 0) break;
+      const wt1Val = candles[idx].wt1;
+      if (!Number.isFinite(wt1Val)) continue;
+      if (direction === "long") {
+        if (wt1Val <= -60) {
+          foundExtreme = true;
+          // Must have turned up at current candle (wt1[i] > wt1[idx])
+          if (Number.isFinite(candles[i].wt1) && candles[i].wt1 > wt1Val) {
+            turnOk = true;
+          }
+          break;
+        }
+      } else {
+        if (wt1Val >= 60) {
+          foundExtreme = true;
+          if (Number.isFinite(candles[i].wt1) && candles[i].wt1 < wt1Val) {
+            turnOk = true;
+          }
+          break;
+        }
+      }
+    }
+    if (!foundExtreme || !turnOk) return null;
+  }
+
+  /* ── 1d. WaveTrend simple threshold filter (opt-in, simpler variant) ──
+   * Single-bar check, mirrors the proven RSI filter's simplicity instead of
+   * the 5-bar extreme+turn pattern above. */
+  if (cfg.enableWaveTrendSimpleFilter) {
+    const wt1Now = candle.wt1;
+    if (!Number.isFinite(wt1Now)) return null;
+    if (direction === "long" && wt1Now > -40) return null;
+    if (direction === "short" && wt1Now < 40) return null;
+  }
+
+  /* ── 1e. Money Flow direction-confirmation filter (opt-in) ────────────
+   * Probed against 113 baseline ICR signals: 98.6% of shorts already have
+   * moneyFlow < 0, 76.7% of longs already have moneyFlow >= 0. Reject the
+   * minority where money flow disagrees with the trade direction. */
+  if (cfg.enableMoneyFlowFilter) {
+    const mf = candle.moneyFlow;
+    if (!Number.isFinite(mf)) return null;
+    if (direction === "long" && mf < 0) return null;
+    if (direction === "short" && mf > 0) return null;
+  }
+
   /* ── 2. Trend gate (20 pts) ────────────────────────────────────────── */
   const trendOk =
     direction === "long"

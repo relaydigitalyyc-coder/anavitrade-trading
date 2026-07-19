@@ -44,6 +44,17 @@ export const DEFAULT_ICR_CONFIG: IcrConfig = {
   // don't chase longs already overbought / shorts already oversold.
   entryRsiMax: 70,
   entryRsiMin: 30,
+
+  // WaveTrend extreme entry filter — OPT-IN only (not in default).
+  // enableWaveTrendExtremeFilter: undefined,
+
+  // WaveTrend simple instantaneous threshold — OPT-IN only (not in default).
+  // Simpler variant of the above: mirrors the proven RSI filter's single-bar
+  // check instead of a 5-bar extreme+turn pattern.
+  // enableWaveTrendSimpleFilter: undefined,
+
+  // Money Flow direction-confirmation filter — OPT-IN only (not in default).
+  // enableMoneyFlowFilter: undefined,
 };
 
 // Recalibrated tier thresholds based on empirical outcomes:

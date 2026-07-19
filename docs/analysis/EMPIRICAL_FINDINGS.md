@@ -1,5 +1,28 @@
 # ICR Engine — Empirical Findings & Calibrated Config
 
+## Release status — not validated for capital deployment (2026-07-19)
+
+This document records research configuration and historical observations. It is
+**not** evidence that an ICR strategy is profitable or suitable for automated
+DEX execution.
+
+- The historical parameter sweeps below must not be used as a release gate:
+  selecting or narrating favourable settings from the same corpus is not
+  out-of-sample validation.
+- The production engine and paper lane now evaluate only the just-closed candle
+  (`findLatestSignals`). Replaying a full historical window on each cron is
+  invalid and must never be used to calculate signal counts or performance.
+- As of this update, the retained 4h corpus covers roughly 24 symbols from
+  2026-05-27 through 2026-07-18. The corrected fixed-configuration evaluation
+  produced only four qualified observations and -4R; that sample is far too
+  small to establish an edge, and it does not pass a release gate.
+- The paper book has no recorded entries or evaluated outcomes yet. Automated
+  dispatch must remain disabled until a predeclared rule path completes the
+  required paper/testnet window with documented fees, slippage, and drawdown.
+
+Do not claim user profitability, enable automated signal dispatch, or turn on
+live order submission based on the older aggregate figures in this file.
+
 ## CRITICAL: Do Not Change These Without Re-Backtesting
 
 These parameters were found through 30-symbol, 6-month sweeps with 655+ signal outcomes. They are NOT arbitrary.
@@ -100,6 +123,73 @@ export const DEFAULT_ICR_CONFIG: IcrConfig = {
 - After:  273 trades, WR 22.7%, avgR 1.07, TotalR 292.7, Sharpe 3.79
 - **Mechanism**: Filters out trades chasing already-extended moves. More trades reach the tail, fewer hit the stop.
 - Tighter thresholds (65/35, 60/40) raise WR further but shed too many trades → total R falls.
+
+### Money Flow Direction Filter (Historical-Sweep Candidate, Opt-In — Not a Release Gate)
+
+**Historical replay test** (`scripts/icr-wavetrend-experiment.ts`, 49-pair /
+120-day corpus, 4h+1h, chronological 60/40 split, `simulateSmartExit`
+untouched) — same historical-sweep methodology as the RSI filter above, and
+subject to the same disclaimer at the top of this file: this is NOT
+out-of-sample validation and NOT a release gate on its own. A Market Cipher B
+Money-Flow oscillator was ported from `scripts/ml/pipeline/features.py` to
+`src/server/analysis/indicators.ts::moneyFlow`. Probed against 113 baseline
+ICR signals first: 98.6% of shorts already had `moneyFlow < 0`, 76.7% of longs
+already had `moneyFlow >= 0` — direction and money flow already agree most of
+the time. A single-bar confirmation gate (`enableMoneyFlowFilter`, opt-in,
+`IcrConfig`) rejects the minority where they disagree:
+
+| Split | Metric | Baseline | +MoneyFlow filter |
+|---|---|---|---|
+| Validation | Trades | 369 | 296 (-19.8%) |
+| Validation | Win Rate | 48.2% | 49.0% |
+| Validation | Profit Factor | 1.71 | 1.75 |
+| Validation | Sharpe | 3.68 | 3.82 |
+| Validation | Max Drawdown | 44.8% | 24.5% |
+| Walk-forward | | PASS | PASS |
+
+Directionally interesting (drawdown nearly halved on this corpus while
+PF/Sharpe held flat-to-better, walk-forward passes both sides) but this is one
+run on one historical corpus — the exact failure mode this file's release-status
+banner warns about. **Not enabled in `DEFAULT_ICR_CONFIG`.** Before any
+consideration of enabling it: run against the live paper lane's
+`findLatestSignals` path (per-candle, not historical replay) for the same
+predeclared window the release-status section requires, with fees/slippage/
+drawdown documented, same as any other release-gate candidate.
+
+### WaveTrend Extreme Filter (Two Variants, Both Rejected)
+
+Same experiment also ported `waveTrend` (Market Cipher B) and tried it as an
+entry-timing filter two ways — both **eliminated 100% of validation trades**
+(walk-forward FAIL) on the same historical corpus, verified as a real
+structural mismatch, not a bug:
+
+- **Strict** (`enableWaveTrendExtremeFilter`): wt1 at or beyond ±60 within the
+  last 5 candles, then turning back toward zero. 0/49 pairs produced a signal.
+- **Simple** (`enableWaveTrendSimpleFilter`): current-candle wt1 beyond ±40,
+  no lookback. Also 0/49 pairs.
+
+Root cause, confirmed by direct inspection of wt1 at the candles where ICR
+*does* already accept a signal: 0/15 sampled long signals had wt1 <= -40, and
+0/34 sampled short signals had wt1 >= +40 — WaveTrend is essentially never at
+an extreme when ICR's other 7 gates (impulse → pullback → compression →
+trigger) all align. **DO NOT** gate ICR entries on a reversal-timing
+oscillator: ICR is a continuation-pattern engine (enters after an impulse has
+already started resolving through a pullback), and WaveTrend-extreme measures
+the opposite thing — the initial reversal point, before ICR's structural
+gates would ever fire. The two entry philosophies are close to mutually
+exclusive on this engine. Both fields exist in `IcrConfig`, both are opt-in,
+neither is in `DEFAULT_ICR_CONFIG`, and neither should be enabled without a
+fundamentally different (reversal-based, not continuation-based) signal
+source built alongside them.
+
+### Stochastic RSI (Ported, Not Yet Tested As a Filter)
+
+`stochRsi` was also ported (`src/server/analysis/indicators.ts`) and wired
+into `EnrichedCandle.stochRsiK`/`stochRsiD`, but no filter variant has been
+built or tested yet. Initial probe (113 baseline signals): longs cluster
+p10=32/p50=61/p90=93, shorts p10=9/p50=26/p90=62 — much broader spread than
+Money Flow's clean sign-alignment, no obvious single-bar threshold. Left as
+an open item, not a finding either way.
 
 ## What To Do Next (Future Builder Agents)
 

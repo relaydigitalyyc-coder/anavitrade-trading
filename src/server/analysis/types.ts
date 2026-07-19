@@ -31,6 +31,11 @@ export interface EnrichedCandle extends Kline {
   displacement: number;
   coilScore?: number;
   coilGrade?: string;
+  wt1: number;
+  wt2: number;
+  moneyFlow: number;
+  stochRsiK: number;
+  stochRsiD: number;
 }
 
 export interface UnifiedSignal {
@@ -104,6 +109,20 @@ export interface IcrConfig {
   // Validated optimum 70/30 (+292.7R vs +274.8R, Sharpe 3.79 vs 3.47).
   entryRsiMax?: number;
   entryRsiMin?: number;
+  // WaveTrend extreme entry filter: opt-in. When enabled, require that wt1 was at
+  // or below -60 (longs) / above +60 (shorts) within the last 5 candles and has
+  // since turned in the direction of the trade.
+  enableWaveTrendExtremeFilter?: boolean;
+  // WaveTrend simple threshold entry filter: opt-in, simpler variant mirroring
+  // the RSI filter's single-bar check. Require current-candle wt1 <= -40
+  // (longs) / wt1 >= +40 (shorts) — no lookback, no turn requirement.
+  enableWaveTrendSimpleFilter?: boolean;
+  // Money Flow direction-confirmation filter: opt-in. Require moneyFlow >= 0
+  // for longs / <= 0 for shorts at the entry candle. Probed against 113
+  // baseline ICR signals: 98.6% of shorts already have moneyFlow < 0, 76.7%
+  // of longs already have moneyFlow >= 0 — this filter should reject a
+  // minority of signals, unlike the WaveTrend variants which rejected all.
+  enableMoneyFlowFilter?: boolean;
 }
 
 export interface CoilConfig {

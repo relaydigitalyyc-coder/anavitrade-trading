@@ -251,6 +251,227 @@ export function percentRank(
   return result;
 }
 
+/* ─── Rolling Min ──────────────────────────────────────────────────────── */
+
+export function rollingMin(
+  values: number[],
+  length: number,
+): (number | null)[] {
+  const result: (number | null)[] = new Array(values.length);
+  for (let i = 0; i < values.length; i++) {
+    if (i < length - 1) {
+      result[i] = null;
+      continue;
+    }
+    let minVal = values[i];
+    for (let j = i - length + 1; j < i; j++) {
+      if (values[j] < minVal) minVal = values[j];
+    }
+    result[i] = minVal;
+  }
+  return result;
+}
+
+/* ─── Rolling Max ──────────────────────────────────────────────────────── */
+
+export function rollingMax(
+  values: number[],
+  length: number,
+): (number | null)[] {
+  const result: (number | null)[] = new Array(values.length);
+  for (let i = 0; i < values.length; i++) {
+    if (i < length - 1) {
+      result[i] = null;
+      continue;
+    }
+    let maxVal = values[i];
+    for (let j = i - length + 1; j < i; j++) {
+      if (values[j] > maxVal) maxVal = values[j];
+    }
+    result[i] = maxVal;
+  }
+  return result;
+}
+
+/* ─── WaveTrend (Market Cipher B) ──────────────────────────────────────── */
+
+/**
+ * WaveTrend oscillator (Market Cipher B / LazyBear): a faster, more normalized
+ * momentum oscillator than RSI. WT1 is the main line; WT2 is its 2-period SMA.
+ * Ported from scripts/ml/pipeline/features.py _wavetrend.
+ */
+export function waveTrend(
+  close: number[],
+  n1: number = 9,
+  n2: number = 21,
+): { wt1: (number | null)[]; wt2: (number | null)[] } {
+  const n = close.length;
+  const wt1: (number | null)[] = new Array(n).fill(null);
+  const wt2: (number | null)[] = new Array(n).fill(null);
+
+  if (n < n1 + n2) return { wt1, wt2 };
+
+  // 1. ESA = EMA(close, n1)
+  const esa = ema(close, n1);
+
+  // 2. |close - ESA|
+  const absDiff: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    absDiff[i] = esa[i] !== null ? Math.abs(close[i] - esa[i]!) : 0;
+  }
+
+  // 3. D = EMA(|close - ESA|, n1)
+  const d = ema(absDiff, n1);
+
+  // 4. CI = (close - ESA) / (0.015 * D), with safe division
+  const ci: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (esa[i] === null || d[i] === null) {
+      ci[i] = 0;
+    } else {
+      const dSafe = Math.abs(d[i]!) > 1e-12 ? d[i]! : 1;
+      ci[i] = (close[i] - esa[i]!) / (0.015 * dSafe);
+    }
+  }
+
+  // 5. TCI = EMA(CI, n2)
+  const tci = ema(ci, n2);
+
+  // 6. WT1 = TCI
+  for (let i = 0; i < n; i++) {
+    wt1[i] = tci[i];
+  }
+
+  // 7. WT2 = SMA(WT1, 2) — 2-period simple mean of consecutive non-null WT1 values
+  for (let i = 1; i < n; i++) {
+    if (wt1[i] !== null && wt1[i - 1] !== null) {
+      wt2[i] = (wt1[i]! + wt1[i - 1]!) / 2;
+    }
+  }
+
+  return { wt1, wt2 };
+}
+
+/* ─── Money Flow (Market Cipher B) ─────────────────────────────────────── */
+
+/**
+ * Market Cipher B money flow: volume-free price-position oscillator.
+ * Ported from scripts/ml/pipeline/features.py _money_flow.
+ */
+export function moneyFlow(
+  high: number[],
+  low: number[],
+  close: number[],
+  period: number = 9,
+): (number | null)[] {
+  const n = high.length;
+  const result: (number | null)[] = new Array(n).fill(null);
+
+  if (n < period) return result;
+
+  // HLC3 = (high + low + close) / 3
+  const hlc3: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    hlc3[i] = (high[i] + low[i] + close[i]) / 3;
+  }
+
+  // SMA(hlc3, period)
+  const smaHlc3 = sma(hlc3, period);
+
+  // hlc3 - SMA(hlc3, period)
+  const diff: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    diff[i] = smaHlc3[i] !== null ? hlc3[i] - smaHlc3[i]! : 0;
+  }
+
+  // numerator = 2 * SMA(diff, period)
+  const numeratorRaw = sma(diff, period);
+  const numerator: (number | null)[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    numerator[i] = numeratorRaw[i] !== null ? 2 * numeratorRaw[i]! : null;
+  }
+
+  // denominator = SMA(high - low, period)
+  const hlDiff: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    hlDiff[i] = high[i] - low[i];
+  }
+  const denom = sma(hlDiff, period);
+
+  // result = numerator / denominator (safe division)
+  for (let i = 0; i < n; i++) {
+    if (numerator[i] === null || denom[i] === null) {
+      result[i] = null;
+    } else if (Math.abs(denom[i]!) > 1e-12) {
+      result[i] = numerator[i]! / denom[i]!;
+    } else {
+      result[i] = 0;
+    }
+  }
+
+  return result;
+}
+
+/* ─── Stochastic RSI ───────────────────────────────────────────────────── */
+
+/**
+ * Stochastic RSI: RSI's own position within its recent [min, max] range.
+ * Ported from scripts/ml/pipeline/features.py _stoch_rsi.
+ */
+export function stochRsi(
+  rsiValues: number[],
+  period: number = 14,
+  smoothK: number = 3,
+  smoothD: number = 3,
+): { k: (number | null)[]; d: (number | null)[] } {
+  const n = rsiValues.length;
+  const k: (number | null)[] = new Array(n).fill(null);
+  const d: (number | null)[] = new Array(n).fill(null);
+
+  if (n < period + smoothK + smoothD) return { k, d };
+
+  // Rolling min/max of RSI
+  const rsiMin = rollingMin(rsiValues, period);
+  const rsiMax = rollingMax(rsiValues, period);
+
+  // raw = (rsi - rsi_min) / (rsi_max - rsi_min) * 100
+  const raw: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (rsiMin[i] === null || rsiMax[i] === null) {
+      raw[i] = 50;
+    } else {
+      const span = rsiMax[i]! - rsiMin[i]!;
+      if (Math.abs(span) > 1e-12) {
+        raw[i] = ((rsiValues[i] - rsiMin[i]!) / span) * 100;
+      } else {
+        raw[i] = 50;
+      }
+    }
+  }
+
+  // K = SMA(raw, smoothK)
+  const rawSma = sma(raw, smoothK);
+
+  // D = SMA(K, smoothD)
+  const kArr: (number | null)[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    kArr[i] = rawSma[i];
+  }
+
+  const kValues: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    kValues[i] = rawSma[i] !== null ? rawSma[i]! : 50;
+  }
+  const dArr = sma(kValues, smoothD);
+
+  for (let i = 0; i < n; i++) {
+    k[i] = kArr[i];
+    d[i] = dArr[i];
+  }
+
+  return { k, d };
+}
+
 /* ─── Enrich Candles ───────────────────────────────────────────────────── */
 
 /**
@@ -289,6 +510,14 @@ export function enrichCandles(
   const volumeZscore = rollingZscore(volume, config.volumeMaLength);
   const rsi14 = rsi(close, 14);
   const bb = bollinger(close, config.bollingerLength, config.bollingerStd);
+
+  // WaveTrend, Money Flow, Stochastic RSI (ported from ML pipeline)
+  const wt = waveTrend(close, 9, 21);
+  const mf = moneyFlow(high, low, close, 9);
+  const sr = stochRsi(
+    close.map((_, i) => rsi14[i] ?? 50),
+    14, 3, 3,
+  );
 
   const result: EnrichedCandle[] = [];
   for (let i = 0; i < n; i++) {
@@ -338,6 +567,11 @@ export function enrichCandles(
       bbLower: bb.lower[i] ?? 0,
       bbWidth: bb.width[i] ?? 0,
       displacement,
+      wt1: wt.wt1[i] ?? 0,
+      wt2: wt.wt2[i] ?? 0,
+      moneyFlow: mf[i] ?? 0,
+      stochRsiK: sr.k[i] ?? 0,
+      stochRsiD: sr.d[i] ?? 0,
     });
   }
 
