@@ -39,6 +39,14 @@ class EnrichedBar:
     # AO crosses
     ao_cross_up: int = 0; ao_cross_down: int = 0
     ao_dist_zero_atr: float = 0
+    # MACD (12/26/9) — required by divergence.py's detect_macd_divergence
+    macd_line: float = 0; macd_signal: float = 0; macd_hist: float = 0
+    # WaveTrend (Market Cipher B: esa/d/ci/tci, 9/21) — faster-reacting than RSI at extremes
+    wt1: float = 0; wt2: float = 0
+    # Money Flow (Market Cipher B fast/slow, 9/10) — volume-weighted, distinct from vol_zscore/vol_ratio
+    mf_fast: float = 0; mf_slow: float = 0
+    # Stochastic RSI (14/3/3)
+    stoch_rsi_k: float = 0; stoch_rsi_d: float = 0
 
 
 # ═══ Vectorized indicator functions ═══
@@ -137,6 +145,63 @@ def _slope(values: np.ndarray, lookback: int, idx: int) -> float:
     return np.polyfit(xs, ys, 1)[0]
 
 
+def _macd(close: np.ndarray, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Standard MACD: line = EMA(fast) - EMA(slow), signal = EMA(line, signal), hist = line - signal."""
+    macd_line = _ema(close, fast) - _ema(close, slow)
+    signal_line = _ema(macd_line, signal)
+    return macd_line, signal_line, macd_line - signal_line
+
+
+def _rolling_min(values: np.ndarray, period: int) -> np.ndarray:
+    out = np.copy(values)
+    for i in range(len(values)):
+        lo = max(0, i - period + 1)
+        out[i] = np.min(values[lo:i+1])
+    return out
+
+
+def _rolling_max(values: np.ndarray, period: int) -> np.ndarray:
+    out = np.copy(values)
+    for i in range(len(values)):
+        lo = max(0, i - period + 1)
+        out[i] = np.max(values[lo:i+1])
+    return out
+
+
+def _wavetrend(close: np.ndarray, n1: int = 9, n2: int = 21) -> Tuple[np.ndarray, np.ndarray]:
+    """WaveTrend oscillator (Market Cipher B / LazyBear): a faster, more normalized
+    momentum oscillator than RSI, widely used for cleaner cross/extreme signals."""
+    esa = _ema(close, n1)
+    d = _ema(np.abs(close - esa), n1)
+    ci = np.where(d > 1e-12, (close - esa) / (0.015 * np.where(d > 1e-12, d, 1)), 0.0)
+    tci = _ema(ci, n2)
+    wt1 = tci
+    wt2 = _sma(wt1, 2)
+    return wt1, wt2
+
+
+def _money_flow(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> np.ndarray:
+    """Market Cipher B money flow: volume-free price-position oscillator, distinct
+    from the existing vol_zscore/vol_ratio (which measure raw volume, not price
+    position within the bar's range relative to its own recent average)."""
+    hlc3 = (high + low + close) / 3
+    numerator = 2 * _sma(hlc3 - _sma(hlc3, period), period)
+    denominator = _sma(high - low, period)
+    safe_denominator = np.where(np.abs(denominator) > 1e-12, denominator, 1.0)
+    return np.where(np.abs(denominator) > 1e-12, numerator / safe_denominator, 0.0)
+
+
+def _stoch_rsi(rsi: np.ndarray, period: int = 14, smooth_k: int = 3, smooth_d: int = 3) -> Tuple[np.ndarray, np.ndarray]:
+    """Stochastic RSI: RSI's own position within its recent [min, max] range."""
+    rsi_min = _rolling_min(rsi, period)
+    rsi_max = _rolling_max(rsi, period)
+    span = rsi_max - rsi_min
+    raw = np.where(span > 1e-12, (rsi - rsi_min) / np.where(span > 1e-12, span, 1) * 100, 50.0)
+    k = _sma(raw, smooth_k)
+    d = _sma(k, smooth_d)
+    return k, d
+
+
 def _bb_squeeze(bars: List, idx: int, lookback: int = 20) -> float:
     if idx < lookback: return 0.5
     widths = [b.bb_width_pct for b in bars[idx-lookback+1:idx+1]]
@@ -176,6 +241,11 @@ def enrich(klines: List[Dict], config=None) -> List[EnrichedBar]:
     mid, upper, lower, width = _bb(c, cfg.bb_period, cfg.bb_std)
     ao_vals = _ao(h, l, cfg.ao_fast, cfg.ao_slow)
     vol_ma = _sma(v, cfg.vol_period); vol_z = _zscore(v, cfg.vol_period)
+    macd_line, macd_signal, macd_hist = _macd(c)
+    wt1, wt2 = _wavetrend(c)
+    mf_fast = _money_flow(h, l, c, 9)
+    mf_slow = _money_flow(h, l, c, 10)
+    stoch_k, stoch_d = _stoch_rsi(rsi14)
 
     bars = []
     for i in range(n):
@@ -200,6 +270,10 @@ def enrich(klines: List[Dict], config=None) -> List[EnrichedBar]:
             price_in_bb=((c[i]-lower[i])/(upper[i]-lower[i]) if upper[i] > lower[i] else 0.5),
             rsi_extreme_bull=1 if rsi14[i] > 70 else 0,
             rsi_extreme_bear=1 if rsi14[i] < 30 else 0,
+            macd_line=macd_line[i], macd_signal=macd_signal[i], macd_hist=macd_hist[i],
+            wt1=wt1[i], wt2=wt2[i],
+            mf_fast=mf_fast[i], mf_slow=mf_slow[i],
+            stoch_rsi_k=stoch_k[i], stoch_rsi_d=stoch_d[i],
         )
         bars.append(b)
 

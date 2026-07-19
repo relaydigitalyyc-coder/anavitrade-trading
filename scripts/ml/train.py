@@ -27,6 +27,7 @@ try:
     from scripts.ml.pipeline.enrichment import build_row
     from scripts.ml.pipeline.labels import compute_outcome
     from scripts.ml.pipeline.model import train_chronological, save_model
+    from scripts.ml.pipeline.divergence import divergence_score
 except ImportError:
     from pipeline.config import PipelineConfig, DEFAULT, CONFIG_4H, CONFIG_1H_WIDE
     from pipeline.features import enrich
@@ -34,6 +35,7 @@ except ImportError:
     from pipeline.enrichment import build_row
     from pipeline.labels import compute_outcome
     from pipeline.model import train_chronological, save_model
+    from pipeline.divergence import divergence_score
 
 
 def main():
@@ -100,13 +102,26 @@ def main():
         for i in range(warmup_bars, len(bars)):
             smc_signals[i] = extract(bars, i, cfg) if bars[i].atr14 > 0 else SMCSignals.empty()
 
+        # Pre-compute divergence (candidate features — rules-derived, not part of any
+        # frozen model contract; see docs/prd/2026-07-17-honest-ml-validation-gate.md).
+        close_arr = np.array([b.close for b in bars])
+        rsi_arr = np.array([b.rsi14 for b in bars])
+        ao_arr = np.array([b.ao for b in bars])
+        macd_hist_arr = np.array([b.macd_hist for b in bars])
+        divergence_signals = [None] * len(bars)
+        for i in range(warmup_bars, len(bars)):
+            divergence_signals[i] = {
+                'long': divergence_score(close_arr, rsi_arr, ao_arr, macd_hist_arr, i, 'long'),
+                'short': divergence_score(close_arr, rsi_arr, ao_arr, macd_hist_arr, i, 'short'),
+            }
+
         # Build rows for every bar after warmup (both directions)
         for i in range(warmup_bars, min(len(bars), len(bars) - cfg.max_lookforward_bars)):
             if bars[i].atr14 <= 0:
                 continue
 
             for direction in ('long', 'short'):
-                row = build_row(bars, smc_signals, i, direction, symbol, cfg)
+                row = build_row(bars, smc_signals, i, direction, symbol, cfg, divergence_signals)
                 if not row:
                     continue
 

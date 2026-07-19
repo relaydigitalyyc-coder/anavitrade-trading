@@ -3,7 +3,7 @@
 Takes enriched bars + SMC detection results → returns dict rows (one per bar, per direction).
 This is the final step before training/inference. Features are immutable dicts."""
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 from .features import EnrichedBar
 from .smc import SMCSignals
@@ -23,7 +23,8 @@ def _cap(v: float, lo: float = -100, hi: float = 100) -> float:
 
 
 def build_row(bars: List[EnrichedBar], smc_signals: List[SMCSignals],
-              idx: int, direction: str, symbol: str, cfg: PipelineConfig = DEFAULT) -> Dict:
+              idx: int, direction: str, symbol: str, cfg: PipelineConfig = DEFAULT,
+              divergence_signals: Optional[List[Optional[Dict]]] = None) -> Dict:
     """Build ONE feature row for bar `idx` in given direction.
 
     Args:
@@ -33,6 +34,10 @@ def build_row(bars: List[EnrichedBar], smc_signals: List[SMCSignals],
         direction: 'long' or 'short'
         symbol: Pair symbol for metadata
         cfg: PipelineConfig
+        divergence_signals: optional list aligned by bar index; each entry is
+            {'long': divergence_score(...), 'short': divergence_score(...)}
+            precomputed by the caller (see divergence.py::divergence_score).
+            Candidate features only — not part of any frozen model contract.
 
     Returns:
         Dict with all features ready for model training/inference
@@ -84,6 +89,16 @@ def build_row(bars: List[EnrichedBar], smc_signals: List[SMCSignals],
     ix3 = _cap(b.ma_sep_atr * (b.rsi14 - bars[max(0, idx-3)].rsi14))
     ix4 = _cap(b.atr_percentile * b.bb_squeeze_intensity)
 
+    # ── Divergence (candidate features — see divergence.py; not in any frozen contract) ──
+    div = (divergence_signals[idx] or {}).get(direction) if divergence_signals else None
+    div = div or {
+        'rsi_div_type': 0, 'rsi_div_strength': 0.0,
+        'ao_div_type': 0, 'ao_div_strength': 0.0,
+        'macd_div_type': 0, 'macd_div_strength': 0.0,
+        'composite_div_count': 0, 'composite_div_strength': 0.0,
+        'any_divergence': 0, 'triple_divergence': 0,
+    }
+
     return {
         # Metadata
         'symbol': symbol,
@@ -122,4 +137,16 @@ def build_row(bars: List[EnrichedBar], smc_signals: List[SMCSignals],
         # Interaction features (4 features)
         'bb_sqz_x_fvg_dist': ix1, 'ao_accel_x_ob_dist': ix2,
         'ma_sep_x_rsi_vel': ix3, 'atr_pct_x_bb_sqz': ix4,
+        # Divergence (10 candidate features — rules-derived, not yet in any frozen contract)
+        'rsi_div_type': div['rsi_div_type'], 'rsi_div_strength': div['rsi_div_strength'],
+        'ao_div_type': div['ao_div_type'], 'ao_div_strength': div['ao_div_strength'],
+        'macd_div_type': div['macd_div_type'], 'macd_div_strength': div['macd_div_strength'],
+        'composite_div_count': div['composite_div_count'], 'composite_div_strength': div['composite_div_strength'],
+        'any_divergence': div['any_divergence'], 'triple_divergence': div['triple_divergence'],
+        # WaveTrend / Money Flow / Stochastic RSI (candidate features, Market Cipher B derived)
+        'wt1': b.wt1, 'wt2': b.wt2, 'wt_cross_bull': 1 if (b.wt1 > b.wt2 and bars[max(0, idx-1)].wt1 <= bars[max(0, idx-1)].wt2) else 0,
+        'wt_cross_bear': 1 if (b.wt1 < b.wt2 and bars[max(0, idx-1)].wt1 >= bars[max(0, idx-1)].wt2) else 0,
+        'mf_fast': b.mf_fast, 'mf_slow': b.mf_slow,
+        'stoch_rsi_k': b.stoch_rsi_k, 'stoch_rsi_d': b.stoch_rsi_d,
+        'macd_hist': b.macd_hist,
     }
