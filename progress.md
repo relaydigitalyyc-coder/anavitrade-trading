@@ -184,6 +184,61 @@ Cross-referenced 6 Claude Code session logs from the past 4 days:
 
 ---
 
+<!-- source: progress/joyful-petting-castle.md -->
+
+
+## Session: joyful-petting-castle (2026-07-19T07:48Z)
+
+### Wallet assets panel + PancakeSwap execution venue (done, staged-only)
+- Added `useWalletAssets`/`WalletAssetsPanel` on dashboard.
+- Added `src/server/pancakeswap/` (config/types/client/signing/store/adapter/router),
+  Permit2 delegation onboarding UI at `/onboarding/pancakeswap`, `fanOutPancakeswap`
+  dispatch wiring (reaches `status="staged"` only — live submission off by default),
+  inert custodial-agent scaffold. Migration `0013_pancakeswap_execution.sql`.
+- Fixed `~/.claude/settings.json`'s dev-server-block hook to add `!process.env.TMUX`
+  guard (user-approved), matching the sibling build/test-warning hook's pattern.
+
+### Aster onboarding: real chainId-mismatch root cause + fix
+- Found substantial pre-existing UNCOMMITTED work on Aster onboarding in this tree
+  (not mine) — `registerAndApproveAgent` agent-only fallback mode, live chainId
+  reading, better error messaging. User confirmed: continue it.
+- User reported the deployed site still fails for Rabby wallet with
+  "chainId should be same as current chainId". Root-caused: Aster's EIP-712 domain
+  uses a fixed non-real chainId (1666 mainnet / 714 testnet) purely as a signature
+  domain separator; strict wallets (Rabby, sometimes MetaMask) refuse
+  eth_signTypedData_v4 unless the wallet's *actual current* network matches
+  domain.chainId. The existing e2e mock (`aster-injected-wallet.ts`) had this
+  backwards — it explicitly forbade wallet_switchEthereumChain/wallet_addEthereumChain
+  and asserted the wallet must NOT leave chainId 1.
+- User decision: prompt the wallet to switch/add the signing-domain chain — the
+  correct, standard fix for this error class.
+- Implemented:
+  - `src/server/worker.ts`: `POST /api/aster-chain-rpc/:network` — minimal read-only
+    JSON-RPC stub (eth_chainId/net_version/etc.) so wallet_addEthereumChain's
+    RPC-liveness check passes for Aster's non-real signing chainId. Rejects any
+    state-changing call.
+  - `src/lib/asterWalletSignature.ts`: new `switchOrAddAsterSigningChain()`, called
+    inside `signAsterRegistrationTypedData()` before requesting the signature —
+    tries `wallet_switchEthereumChain` first, falls back to `wallet_addEthereumChain`
+    on error code 4902 (chain not yet added).
+  - `scripts/aster-injected-wallet.ts`: mock now simulates strict wallet behavior
+    correctly — starts on chainId 1, requires wallet_addEthereumChain before it
+    "knows" chain 1666/714, refuses eth_signTypedData_v4 unless currently on the
+    matching chain (this is what actually validates the fix, vs. the old mock which
+    couldn't have caught this bug at all).
+  - `scripts/aster-onboarding-browser.ts`: inverted the forbidden-methods assertion —
+    switch/add calls are now REQUIRED, not forbidden; legacy signing methods
+    (personal_sign, eth_signTypedData, eth_signTypedData_v3) remain forbidden.
+- `pnpm check` (both tsconfigs) + `vite build` pass. Standalone typecheck on the two
+  script files (not covered by either tsconfig) also passes.
+- NOT YET DONE: haven't run `pnpm aster:smoke-browser` myself (dev server at :5174
+  unreachable from this session's shell — unresolved connectivity gap, user's
+  terminal can reach it, mine can't). User is going to run it and paste output.
+- Added `Disconnect Wallet` button to `WalletPanel.tsx` (wagmi `useDisconnect`,
+  separate from the existing server-side "Revoke Wallet Access").
+
+---
+
 <!-- source: progress/jazzy-spinning-brook.md -->
 
 ## Session: jazzy-spinning-brook (started 2026-07-18T19:46:45Z)
@@ -302,4 +357,24 @@ Cross-referenced 6 Claude Code session logs from the past 4 days:
   fat-tailed ~19-23%-WR exit engine is the closest match for "Sharpe 3+, low
   WR" but its raw trade-level data isn't in this repo -- would need
   regenerating via the ICR strategy backtest sweep).
+
+### "Trading edge" goal -- ICR real-data backtest (baseline + parallel variant sweep)
+- Ran icr_strategy's `icr.main --binance-htf` for real: 20 altcoins, 4h bars,
+  2026-01 to 2026-06 (real Binance data via monthly archives, checksum-implicit
+  via the package's own fetcher). Baseline/default config result:
+  **n=17 trades, WR 41.2%, PF 1.92, expectancy +0.47R, net +8.0R.**
+  Directionally positive and inside the 35-50% WR band previously discussed,
+  but n=17 is far too small to call validated (95% CI would span roughly
+  20-65 percentage points) -- same small-sample caveat as everything else
+  found this session (ML gate, EMPIRICAL_FINDINGS retraction).
+- Dispatched 6 parallel subagents (Claude, not DeepSeek -- deepseek-swarm
+  skill's scripts don't actually exist in this environment, only SKILL.md;
+  no DEEPSEEK_API_KEY configured either) on the SAME cached real klines
+  (/tmp/icr-run/binance_data/4h/, no re-fetch, no collision), each testing
+  ONE independent pre-registered hypothesis via the package's own
+  --real-edge-report (ablation + walk-forward + false-positive-trap
+  pipeline), following the established "one variable at a time, negative
+  results kept" discipline: disable-divergence, disable-mtf, disable-ict,
+  score-threshold=85 (stricter), coil-threshold=80 (stricter). Awaiting
+  results -- will aggregate ALL honestly, not cherry-pick the best.
 

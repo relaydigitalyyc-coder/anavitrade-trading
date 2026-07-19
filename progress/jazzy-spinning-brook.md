@@ -114,3 +114,23 @@
   fat-tailed ~19-23%-WR exit engine is the closest match for "Sharpe 3+, low
   WR" but its raw trade-level data isn't in this repo -- would need
   regenerating via the ICR strategy backtest sweep).
+
+### "Trading edge" goal -- ICR real-data backtest (baseline + parallel variant sweep)
+- Ran icr_strategy's `icr.main --binance-htf` for real: 20 altcoins, 4h bars,
+  2026-01 to 2026-06 (real Binance data via monthly archives, checksum-implicit
+  via the package's own fetcher). Baseline/default config result:
+  **n=17 trades, WR 41.2%, PF 1.92, expectancy +0.47R, net +8.0R.**
+  Directionally positive and inside the 35-50% WR band previously discussed,
+  but n=17 is far too small to call validated (95% CI would span roughly
+  20-65 percentage points) -- same small-sample caveat as everything else
+  found this session (ML gate, EMPIRICAL_FINDINGS retraction).
+- Dispatched 6 parallel subagents (Claude, not DeepSeek -- deepseek-swarm
+  skill's scripts don't actually exist in this environment, only SKILL.md;
+  no DEEPSEEK_API_KEY configured either) on the SAME cached real klines
+  (/tmp/icr-run/binance_data/4h/, no re-fetch, no collision), each testing
+  ONE independent pre-registered hypothesis via the package's own
+  --real-edge-report (ablation + walk-forward + false-positive-trap
+  pipeline), following the established "one variable at a time, negative
+  results kept" discipline: disable-divergence, disable-mtf, disable-ict,
+  score-threshold=85 (stricter), coil-threshold=80 (stricter). Awaiting
+  results -- will aggregate ALL honestly, not cherry-pick the best.
