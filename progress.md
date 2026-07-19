@@ -227,3 +227,23 @@ Cross-referenced 6 Claude Code session logs from the past 4 days:
   files that can't be append-only.
 - Convention documented in `docs/ops/multi-session-coordination.md`.
 
+### Part 1 — VPS testing consolidation (done)
+- Wrote `scripts/ml/vps-locked-gate.sh`: daily cron, fetches a fresh checksum-verified
+  49-pair/120-day corpus (`binance_archive.py`, window ends at the last completed month —
+  Binance Vision has no current-month monthly archive, discovered during testing),
+  runs `locked-walkforward-backtest.py`, deploys to `/opt/anavitrade/models/champion/`
+  only on `test.acceptance.passed`, ledger-logs every run to `locked-gate.jsonl`.
+- Tested end-to-end on the live VPS (user-authorized SSH) with a 2-symbol smoke corpus:
+  fetch -> gate -> ledger all verified working; confirmed fail-closed behavior (gate
+  failed on the tiny sample, champion/ correctly left untouched).
+- Found and fixed a real gap along the way: `meta-v22-definitive/model_card.json` (the
+  frozen contract) was never on the VPS — `deploy-vps.sh`'s rsync excludes all `*.json`.
+  Copied the contract (`model_card.json` + `classifier.txt`) to the VPS as a one-time
+  prerequisite; not yet added to the automated deploy script (follow-up).
+- Backed up the existing crontab (`/tmp/crontab.bak.20260718230454` on the VPS) and
+  swapped `0 */6 * * * vps-train.sh` (leaky path, blind-deployed 20+ historical model
+  dirs, broken DL/RL steps) for `0 3 * * * vps-locked-gate.sh`.
+- Documented in `docs/ops/SYSTEM_OPERATIONS.md`: CORTEX's AUC-floor gate marked
+  deprecated for the meta-v22 lineage (kept for reference/other lineages), new
+  VPS-locked-gate section added.
+

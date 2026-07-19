@@ -141,14 +141,52 @@ cat scripts/data/models/meta-v6/shap_importance.json | python3 -c \
 - Best features: h1_fvg_size_atr, h4_bb_width_pct, h4_ma_separation_atr
 - Threshold: P(win) > 0.682 → 1.1% pass rate at 89% WR
 
-### CORTEX health-gated training
+### CORTEX health-gated training — DEPRECATED for the meta-v22 lineage (2026-07-19)
 ```bash
-# Use the CORTEX module instead of raw training — verifies improvement
+# Superseded by scripts/ml/vps-locked-gate.sh (see below) for meta-v22 and later.
+# This module's AUC-floor/degradation check (regex-parsed stdout, no purged split,
+# no trade-level economics) is strictly weaker than the locked gate's purged
+# 70/15/15 split + Wilson CI + realized P&L. Kept for reference / other model
+# lineages; do not use for meta-v22 promotion decisions.
 node scripts/cortex/modules/metacognitive-train.js
 # Reads CORTEX_DATASET and CORTEX_MODEL_DIR env vars
 # Verifies: AUC didn't degrade, Brier didn't spike, data is fresh
 # Writes to: scripts/cortex/memory/metacognitive-train.jsonl
 ```
+
+### VPS continuous honest testing (current default, 2026-07-19)
+
+The VPS cron previously ran `scripts/ml/vps-train.sh` every 6h: the leaky
+`train.py` path (threshold selected on the test set — see
+`docs/prd/2026-07-17-honest-ml-validation-gate.md`), followed by a blind `cp` of
+**every** `scripts/data/models/meta-v*/` directory into production with no
+gating at all, plus a broken DL step and a 0-trade RL step. That cron entry has
+been replaced:
+
+```bash
+# VPS crontab (root@5.161.229.209), daily at 03:00 UTC:
+0 3 * * * cd /opt/anavitrade && bash scripts/ml/vps-locked-gate.sh >> /var/log/anavitrade-locked-gate.log 2>&1
+```
+
+`scripts/ml/vps-locked-gate.sh`:
+1. Fetches a fresh checksum-verified corpus via `scripts/ml/binance_archive.py`
+   (49 pairs, `scripts/data/pairs/locked-gate-49.json`, trailing 120 days ending
+   at the last **completed** month — Binance Vision only serves finished
+   monthly archives, so the in-progress current month is deliberately excluded).
+2. Runs `scripts/ml/locked-walkforward-backtest.py` against it (purged
+   70/15/15 split, threshold locked on validation only, one test evaluation).
+3. Deploys to `/opt/anavitrade/models/champion/` **only** if
+   `report.json`'s `test.acceptance.passed` is true. On failure, `champion/`
+   is left untouched and the failure is logged — never a paging exit code,
+   same "ledger is the source of truth" philosophy as CORTEX above.
+4. Every run (pass or fail) appends one line to
+   `scripts/cortex/memory/locked-gate.jsonl`.
+
+The old `vps-train.sh` (leaky `train.py` + blind deploy + broken DL/RL steps)
+is no longer on cron. It's kept in the repo for manual iteration-signal runs
+only — never cite its output as a result (per the PRD's commit-hygiene rule).
+
+Crontab backup taken before the swap: `/tmp/crontab.bak.20260718230454` on the VPS.
 
 ---
 
