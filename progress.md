@@ -247,3 +247,29 @@ Cross-referenced 6 Claude Code session logs from the past 4 days:
   deprecated for the meta-v22 lineage (kept for reference/other lineages), new
   VPS-locked-gate section added.
 
+### Part 1 follow-up — continuous altcoin coverage, not repeated re-fetching
+- User correction: the gate shouldn't just refresh candles for the same 49
+  pairs forever -- it should expand to test altcoins not yet covered.
+- New `scripts/ml/select-untested-pairs.py`: pulls the live Binance USD-M
+  perpetual universe (~480 symbols after majors + illiquid-floor exclusion),
+  ranks by 24h quoteVolume **ascending** (deliberately -- edge shows up on
+  smaller alts per EMPIRICAL_FINDINGS.md, a volume-descending queue would
+  starve exactly those), picks the next untested batch of 20, persists state
+  in `scripts/cortex/memory/tested-pairs.json`, cycles once the universe is
+  exhausted. Filtered out a non-ASCII anomaly symbol found during testing.
+- Wired into `vps-locked-gate.sh` as a new [1/4] step, replacing the static
+  49-pair file (deleted).
+- Hit the VPS's known fapi.binance.com geo-block (HTTP 451) on the
+  exchangeInfo/ticker endpoints this selector needs (data.binance.vision, used
+  for the actual kline archives, is unaffected). Added the same X-MBX-APIKEY
+  bypass-header pattern already used by kline-cron.ts/fetch-klines-mtf.mjs,
+  plus a `.env`-sourcing step in the cron script so cron's minimal environment
+  picks up `BINANCE_API_KEY` once set. **Blocked on a credential**: no
+  Binance API key is configured on the VPS yet (read-only market-data key is
+  sufficient -- no trading permission needed). Asked the user to provide one.
+- Verified fail-closed behavior end-to-end on the VPS without the key: logs
+  a `select_pairs` stage failure to the ledger, doesn't crash, doesn't touch
+  champion/. Feature is inert (falls back to failing safely) until the key
+  is added, at which point the daily cron will start expanding coverage
+  automatically with no further changes needed.
+
