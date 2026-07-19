@@ -251,6 +251,16 @@ Current ML approach supersedes rule-based — see `docs/ops/SYSTEM_OPERATIONS.md
    (tested on real klines, honest out-of-sample split, no p-hacking), push it
    to the platform immediately. The bar is validation, not caution for its
    own sake — once a filter clears that bar, ship it.
+4. **Minimum bar for "found edge": +1R expectancy per trade**, not merely
+   "statistically distinguishable from zero." A segment/config showing
+   +0.1-0.3R expectancy is not reportable as edge even if it survives a
+   significance test — this session's own 6-month ICR run (n=17, PF 1.92,
+   looked great) evaporated to net negative (n=136, PF 0.87) at adequate
+   sample size, and a marginal expectancy has no margin against fees,
+   slippage, or ordinary variance. +1R can come from win rate OR payoff
+   asymmetry (a lower win rate with large average wins, e.g. a wide-trail
+   fat-tailed exit system, is just as valid a path to +1R as a high win
+   rate) — don't narrow the search to win-rate-driven segments only.
 
 ## Codex + Claude Multi-Agent Orchestration
 
