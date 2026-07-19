@@ -6,6 +6,7 @@ import { createContext } from "./context";
 import type { Env } from "./_core/env";
 import { runCoinlegsScraper } from "./coinlegs-scraper";
 import { generateSignals } from "./signals/generator";
+import { runBinanceGainersScan } from "./signals/binance-gainers";
 import { validateSignalOutcomes, getOutcomeStats } from "./outcome/validator";
 import { validateAllSignalOutcomes } from "./analysis/outcome/analyze-outcome";
 import { crystallizeFees } from "./fee/engine";
@@ -455,6 +456,63 @@ app.post("/api/aster/live-proof", async (c) => {
   }
 });
 
+/**
+ * Minimal read-only JSON-RPC stub for Aster's off-chain EIP-712 signing
+ * domain (chainId 1666 mainnet / 714 testnet). This "chain" has no real
+ * blockchain behind it — Aster uses the chainId purely as a signature
+ * domain separator (their own SDK examples sign it directly with a raw
+ * private key, no wallet/network concept at all). Browser wallets that
+ * enforce eth_signTypedData_v4's domain.chainId matching the *currently
+ * connected* network (Rabby, and MetaMask in some configurations) will
+ * refuse to sign unless the wallet has actually switched to that chainId
+ * first, which itself requires wallet_addEthereumChain to succeed — and
+ * that call validates the given rpcUrl actually responds to eth_chainId.
+ * This endpoint exists solely to satisfy that validation step. It must
+ * never be used for real transactions; any state-changing RPC method is
+ * rejected outright.
+ */
+const ASTER_SIGNING_CHAIN_IDS: Record<string, number> = { mainnet: 1666, testnet: 714 };
+const ASTER_SIGNING_RPC_READ_METHODS = new Set([
+  "net_version", "eth_blockNumber", "eth_gasPrice", "eth_getBalance",
+  "eth_getTransactionCount", "eth_getCode", "eth_call", "eth_estimateGas",
+  "eth_getBlockByNumber", "eth_getLogs", "eth_maxPriorityFeePerGas",
+]);
+
+app.post("/api/aster-chain-rpc/:network", async (c) => {
+  const chainId = ASTER_SIGNING_CHAIN_IDS[c.req.param("network")];
+  if (!chainId) return c.json({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "Unknown Aster signing network" } }, 404);
+
+  const body = await c.req.json().catch(() => null);
+  const requests = Array.isArray(body) ? body : [body];
+  const responses = requests.map((req: any) => {
+    const id = req?.id ?? null;
+    switch (req?.method) {
+      case "eth_chainId":
+        return { jsonrpc: "2.0", id, result: `0x${chainId.toString(16)}` };
+      case "net_version":
+        return { jsonrpc: "2.0", id, result: String(chainId) };
+      case "eth_blockNumber":
+      case "eth_gasPrice":
+      case "eth_maxPriorityFeePerGas":
+        return { jsonrpc: "2.0", id, result: "0x0" };
+      case "eth_getBalance":
+      case "eth_getTransactionCount":
+        return { jsonrpc: "2.0", id, result: "0x0" };
+      case "eth_getLogs":
+        return { jsonrpc: "2.0", id, result: [] };
+      case "eth_sendTransaction":
+      case "eth_sendRawTransaction":
+        return { jsonrpc: "2.0", id, error: { code: -32601, message: "This chainId is a signature-only domain — no real transactions are ever submitted here." } };
+      default:
+        if (req?.method && ASTER_SIGNING_RPC_READ_METHODS.has(req.method)) {
+          return { jsonrpc: "2.0", id, result: null };
+        }
+        return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unsupported method on the Aster signature-only chain: ${req?.method}` } };
+    }
+  });
+  return c.json(Array.isArray(body) ? responses : responses[0]);
+});
+
 /* ─── Fee Engine ─────────────────────────────────────────────────── */
 
 /** Protected admin endpoint – manually trigger fee crystallization. */
@@ -674,6 +732,7 @@ export default {
    * ----------------|-------------|----------------------
    * Native generator| every fire  | ~500ms local detection — PRIMARY
    * Coinlegs scrape | every fire  | ~300ms API call — SECONDARY
+   * Binance gainers | every fire  | 1 ticker/24hr call — top gainers + volume floor
    * Demo sync       | every 5th   | DB batch (signals to demo accounts)
    * Analysis engine | every 5th   | ICR scoring + enrichment
    * Outcome val     | every 15th  | ~1s Binance kline API
@@ -724,6 +783,24 @@ export default {
       } catch (mErr: any) {
         console.warn("[mirror-fallback] mirror also failed:", mErr?.message);
       }
+    }
+
+    // Binance perp top-gainers / volume-breakout scanner (every trigger).
+    // Single ticker/24hr call, no per-symbol klines — safe under the
+    // Worker's 50-subrequest cap even at 60s cadence.
+    try {
+      const gainersResult = await runBinanceGainersScan();
+      console.log("[binance-gainers-cron]", JSON.stringify({
+        fetched: gainersResult.fetched,
+        qualified: gainersResult.qualified,
+        tierA: gainersResult.tierA,
+        intents: gainersResult.intentsCreated,
+        error: gainersResult.error,
+      }));
+      results.gainers = gainersResult;
+    } catch (e: any) {
+      console.warn("[binance-gainers-cron] error:", e?.message);
+      results.gainers = { error: e?.message };
     }
 
     // Demo sync -- signals to demo accounts every 5th fire (~5 min)
