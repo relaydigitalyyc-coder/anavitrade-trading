@@ -273,3 +273,33 @@ Cross-referenced 6 Claude Code session logs from the past 4 days:
   is added, at which point the daily cron will start expanding coverage
   automatically with no further changes needed.
 
+### Walk-forward false-negative fix (Fable subagent, per user's diagnosis)
+- User's instinct was correct: unified-backtest.mjs's walkForward() FAILs on
+  ICR Strategy/RR Conservative/RR Optimal/Consensus were false negatives, not
+  real fragility. Root cause I diagnosed before delegating: backtest-prioritized.json
+  has NO timestamp field; the array is sorted by descending score. The
+  positional 60/40 "chronological" split was actually a score-sorted split,
+  quarantining every score-selective strategy's accepted trades into "train".
+- Delegated the fix to a Fable-5 subagent with full diagnosis already done
+  (root cause, exact function/lines, recommended approach). Fix: score-quintile
+  stratified, fixed-seed (1337) reproducible split instead of positional slice.
+- Result: all 4 previously-FAILing strategies now PASS (robust) -- val Sharpe
+  8-10 on 43-108 trades, matching train partitions. Verified no trades lost
+  (train+val sums match full-corpus accepted counts exactly) and output is
+  byte-identical across repeated runs.
+- Honest caveat baked into the code comment: without timestamps this is
+  split-stability evidence, not temporal generalization evidence. Still
+  inherits every bias already in the corpus. Committed as `1b5510d`.
+
+### Cross-pollinate ML+rules / winrate 35-50% goal -- status
+- Investigated `scripts/unified-backtest.mjs` (the actual Sharpe-3+-relevant
+  system per user's "data tells all" framing) rather than guessing which
+  target the user meant. All 8 strategies already show 64-76% WR (above the
+  35-50% band, not below it) -- the ambiguity got resolved by fixing the
+  walk-forward methodology first, which was the more urgent, concrete,
+  well-diagnosed problem. Revisit the specific 35-50% WR target once the user
+  clarifies which system/corpus it refers to (EMPIRICAL_FINDINGS.md's
+  fat-tailed ~19-23%-WR exit engine is the closest match for "Sharpe 3+, low
+  WR" but its raw trade-level data isn't in this repo -- would need
+  regenerating via the ICR strategy backtest sweep).
+
