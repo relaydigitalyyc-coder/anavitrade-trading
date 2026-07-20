@@ -82,3 +82,16 @@ identified) is the honest next step before drawing a firmer conclusion
 either way, given every sample size here is still fairly small. Any future
 work on this hypothesis should start from this file's pre-registered rules
 and the numbers above, not from a fresh, unanchored re-test.
+
+## Additional variant: strict full-confluence + volume confirmation
+
+Tested one more principled variant (`run_symbol_strict_confluence`): require
+ALL conditions together (oversold AND bullish/bearish divergence, not OR)
+plus volume confirmation on the sweep bar (>1.5x 20-bar average — the
+standard SMC/ICT expectation that a genuine liquidity sweep/stop-hunt shows
+a volume spike, which the original test never checked). Result: **zero
+signals on both 4h and 1h** — the conditions never co-occur in this dataset.
+Over-constrained; produces no information either way. The original OR-based
+logic remains the more appropriately-calibrated strictness level for this
+dataset, and it's already been tested exhaustively above with no result
+clearing +1R.

@@ -445,3 +445,84 @@ def run_symbol_wide_trail(path):
             i += 1
 
     return trades
+
+
+def run_symbol_strict_confluence(path):
+    """Stricter variant, pre-registered: requires FULL confluence (oversold AND
+    bullish divergence together, not OR) plus volume confirmation on the sweep
+    bar (>1.5x 20-bar average volume) -- a standard SMC/ICT concept (a genuine
+    stop-hunt/liquidity sweep should show a volume spike) that the original
+    test never checked. Same stop/target/timeout as the original fixed-target
+    long test."""
+    df = pd.read_csv(path)
+    o, h, l, c, v = (df[col].to_numpy(dtype=float) for col in ("open", "high", "low", "close", "volume"))
+    n = len(df)
+    if n < 250:
+        return []
+
+    wt1, _ = wavetrend(c)
+    atr14 = atr(h, l, c)
+    is_swing_low = swing_lows(l)
+    swing_idxs = np.where(is_swing_low)[0]
+    vol_ma20 = pd.Series(v).rolling(20).mean().to_numpy()
+
+    trades = []
+    i = 60
+    while i < n - MAX_HOLD_BARS - 1:
+        if atr14[i] <= 0 or np.isnan(vol_ma20[i]) or vol_ma20[i] <= 0:
+            i += 1
+            continue
+        prior_swings = swing_idxs[swing_idxs + SWING_LOOKBACK <= i]
+        if len(prior_swings) < 2:
+            i += 1
+            continue
+        recent_swing_i = prior_swings[-1]
+        older_swing_i = prior_swings[-2]
+        if i - recent_swing_i > EQL_MAX_GAP_BARS:
+            i += 1
+            continue
+        gap = abs(l[recent_swing_i] - l[older_swing_i])
+        if gap > EQL_ATR_MULT * atr14[recent_swing_i]:
+            i += 1
+            continue
+        bullish_div = (l[recent_swing_i] < l[older_swing_i]) and (wt1[recent_swing_i] > wt1[older_swing_i])
+        lo_window = l[max(0, i - DISCOUNT_LOOKBACK) : i + 1]
+        hi_window = h[max(0, i - DISCOUNT_LOOKBACK) : i + 1]
+        range_lo, range_hi = lo_window.min(), hi_window.max()
+        if range_hi <= range_lo:
+            i += 1
+            continue
+        position_in_range = (c[i] - range_lo) / (range_hi - range_lo)
+        in_discount = position_in_range <= DISCOUNT_THRESHOLD
+        swept = (l[i] < l[older_swing_i]) and (c[i] > l[older_swing_i])
+        oversold = wt1[i] < OVERSOLD
+        volume_confirmed = v[i] > 1.5 * vol_ma20[i]
+
+        # STRICTER: full confluence (AND, not OR) + volume confirmation
+        if swept and in_discount and oversold and bullish_div and volume_confirmed:
+            entry_i = i + 1
+            if entry_i >= n:
+                break
+            entry = o[entry_i]
+            stop = l[i] - STOP_ATR_BUFFER * atr14[i]
+            risk = entry - stop
+            if risk <= 0:
+                i += 1
+                continue
+            target = entry + TARGET_R * risk
+            outcome_r = None
+            for j in range(entry_i, min(entry_i + MAX_HOLD_BARS, n)):
+                if l[j] <= stop:
+                    outcome_r = (stop - entry) / risk
+                    break
+                if h[j] >= target:
+                    outcome_r = (target - entry) / risk
+                    break
+            if outcome_r is None:
+                last_j = min(entry_i + MAX_HOLD_BARS - 1, n - 1)
+                outcome_r = (c[last_j] - entry) / risk
+            trades.append({"symbol": path.split("/")[-1].split("_")[0], "entry_idx": entry_i, "r": outcome_r})
+            i = entry_i + MAX_HOLD_BARS
+        else:
+            i += 1
+    return trades
