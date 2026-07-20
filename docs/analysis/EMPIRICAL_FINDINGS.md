@@ -321,3 +321,27 @@ entire corpus is the failed locked-gate's candidate set — every row here is
 already below the model's qualifying threshold, so the unfiltered baseline
 itself is negative; this result is about whether the compression filter
 improves or worsens that baseline, not about absolute profitability.)
+
+## Money Flow filter replication test: drawdown benefit does NOT generalize (2026-07-20)
+
+Applied the same out-of-sample discipline used to reject the bottom-confluence
+hypothesis elsewhere this session to the "Money Flow Direction Filter" section
+above. Verified `moneyFlow()`'s implementation first (backward-looking SMA
+only, no lookahead bug), then re-ran the identical, unchanged
+`icr-wavetrend-experiment.ts` methodology against a genuinely disjoint
+36-symbol set (2024-01-present, 4h+1h, fresh Binance data — same disjoint
+universe used for the bottom-confluence replication test).
+
+**Result: the drawdown-halving benefit does not replicate.** Baseline vs.
+Money-Flow-filtered on this set: PF 0.87→0.86 (flat), Sharpe -1.05→-1.11
+(worse), Max Drawdown 307.5%→335.7% (**worse, not halved**). The WaveTrend
+extreme/simple filter rejections, by contrast, reproduce exactly (100% signal
+elimination again) — confirming that finding as robust, not corpus-specific.
+
+Full methodology and results in
+`scripts/research/icr-moneyflow-replication/README.md`. Net effect: the one
+result flagged as "directionally interesting" from this session's parallel
+research thread does not survive genuine replication — consistent with every
+other edge candidate tested this session. **Do not enable
+`enableMoneyFlowFilter` in `DEFAULT_ICR_CONFIG`** on the strength of the
+original single-corpus result.
