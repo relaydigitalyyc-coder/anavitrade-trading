@@ -95,3 +95,25 @@ Over-constrained; produces no information either way. The original OR-based
 logic remains the more appropriately-calibrated strictness level for this
 dataset, and it's already been tested exhaustively above with no result
 clearing +1R.
+
+## Decisive test: genuine out-of-sample replication on disjoint symbols
+
+Per the Fable Plan agent's identified next step: fetched the 36 symbols from
+the project's existing 49-symbol locked-gate universe
+(`scripts/data/models/locked-gate-2026-07-18/report.json`) that are
+genuinely disjoint from every symbol tested above (excluding majors). Ran
+the exact, unchanged, pre-registered LONG rule (no re-tuning) on this new
+data (4h, 2024-01-present).
+
+**Result: n=83, expectancy -0.159R, PF 0.77.** Negative, on a larger sample
+than the original 20-symbol test.
+
+**Pooled across both symbol sets (56 unique symbols, 114 trades total):
+expectancy ≈ -0.01R** — essentially flat. This is the decisive answer: the
+original +0.381R on 20 symbols did not replicate on disjoint out-of-sample
+symbols. It was a favorable draw from symbol selection, not a generalizable
+edge. Combined with every other variation tested above (short, 1h, thin
+liquidity, DEX mismatch, wide-trail exit, strict confluence), this
+hypothesis is now considered **fully tested and rejected** — not merely
+unconfirmed. Future sessions should not re-test this exact confluence rule
+on real klines without a fundamentally different mechanism or new evidence.
